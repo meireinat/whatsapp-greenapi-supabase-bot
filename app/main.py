@@ -38,6 +38,7 @@ async def lifespan(application: FastAPI):
         instance_id=settings.green_api_instance_id,
         api_token=settings.green_api_token,
     )
+    application.state.green_webhook_token = settings.green_api_webhook_token
     if settings.gemini_api_key:
         application.state.gemini_service = GeminiService(
             api_key=settings.gemini_api_key,

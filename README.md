@@ -71,7 +71,7 @@ Alternatively, run the contents of `sql/create_containers_table.sql` via the Sup
    - `GREEN_API_TOKEN`
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - Optional: `SUPABASE_SCHEMA`, `BOT_DISPLAY_NAME`, `GEMINI_API_KEY`
+   - Optional: `GREEN_API_WEBHOOK_TOKEN`, `SUPABASE_SCHEMA`, `BOT_DISPLAY_NAME`, `GEMINI_API_KEY`
 4. Railway uses Nixpacks or Docker automatically. ה-start command מוגדר בקובץ `railway.json` כ־
    ```
    sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"

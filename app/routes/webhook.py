@@ -5,7 +5,15 @@ HTTP routes that integrate with the Green API webhook flow.
 from __future__ import annotations
 
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Response,
+    status,
+)
 
 from app.models.greenapi import GreenWebhookPayload
 from app.services.intent_engine import IntentEngine, IntentResult
@@ -51,6 +59,12 @@ def get_gemini_service() -> GeminiService | None:
     return app.state.gemini_service
 
 
+def get_webhook_token() -> str | None:
+    from app.main import app
+
+    return getattr(app.state, "green_webhook_token", None)
+
+
 @router.post(
     "/webhook",
     status_code=status.HTTP_200_OK,
@@ -63,7 +77,19 @@ async def handle_webhook(
     supabase_service: SupabaseService = Depends(get_supabase_service),
     green_api_client: GreenAPIClient = Depends(get_green_api_client),
     gemini_service: GeminiService | None = Depends(get_gemini_service),
+    authorization: str | None = Header(default=None),
+    webhook_token: str | None = Depends(get_webhook_token),
 ) -> Response:
+    if webhook_token:
+        if not authorization:
+            logger.warning("Missing authorization header for webhook call")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+        scheme, _, token = authorization.partition(" ")
+        provided = token if scheme.lower() == "bearer" else authorization.strip()
+        if provided != webhook_token:
+            logger.warning("Invalid webhook token provided")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
     if payload.messageData.typeMessage.lower() != "textmessage":
         logger.info("Ignoring non-text message (type=%s)", payload.messageData.typeMessage)
         return Response(status_code=status.HTTP_204_NO_CONTENT)

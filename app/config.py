@@ -19,6 +19,7 @@ class Settings(BaseModel):
 
     green_api_instance_id: str
     green_api_token: str
+    green_api_webhook_token: Optional[str] = None
     supabase_url: str
     supabase_service_role_key: str
     supabase_schema: Optional[str] = None
@@ -40,6 +41,9 @@ def get_settings() -> Settings:
         return Settings(
             green_api_instance_id=_require_env("GREEN_API_INSTANCE_ID", credentials),
             green_api_token=_require_env("GREEN_API_TOKEN", credentials),
+            green_api_webhook_token=_optional_env(
+                "GREEN_API_WEBHOOK_TOKEN", credentials
+            ),
             supabase_url=_require_env("SUPABASE_URL", credentials),
             supabase_service_role_key=_require_env(
                 "SUPABASE_SERVICE_ROLE_KEY", credentials
@@ -98,6 +102,7 @@ def _optional_env(name: str, credentials: dict[str, str] | None = None) -> Optio
     credentials = credentials or {}
     key_map = {
         "GEMINI_API_KEY": "gemini_api_key",
+        "GREEN_API_WEBHOOK_TOKEN": "green_api_webhook_token",
     }
     return os.getenv(name) or credentials.get(key_map.get(name, name.lower()))
 
