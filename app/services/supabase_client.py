@@ -27,16 +27,21 @@ class SupabaseService:
     ) -> None:
         self._client: Client = create_client(supabase_url, supabase_key)
         if schema:
-            self._client.postgrest.schema = schema
+            # `postgrest.schema` setter expects ASCII-only headers; avoid direct assignment.
+            self._schema = schema
+        else:
+            self._schema = None
 
     def get_daily_containers_count(self, target_date: dt.date) -> int:
         """
         Count containers unloaded on a specific date.
         """
         logger.debug("Fetching container count for %s", target_date.isoformat())
+        query = self._client.table("containers")
+        if self._schema:
+            query = query.schema(self._schema)
         response = (
-            self._client.table("containers")
-            .select("SHANA", count="exact")
+            query.select("SHANA", count="exact")
             .gte("TARICH_PRIKA", target_date.isoformat())
             .lte("TARICH_PRIKA", target_date.isoformat())
             .execute()
@@ -67,13 +72,12 @@ class SupabaseService:
             start_date.isoformat(),
             end_date.isoformat(),
         )
-        response = (
-            self._client.table("containers")
-            .select("SHANA", count="exact")
-            .gte("TARICH_PRIKA", start_date.isoformat())
-            .lte("TARICH_PRIKA", end_date.isoformat())
-            .execute()
-        )
+        query = self._client.table("containers")
+        if self._schema:
+            query = query.schema(self._schema)
+        response = query.select("SHANA", count="exact").gte(
+            "TARICH_PRIKA", start_date.isoformat()
+        ).lte("TARICH_PRIKA", end_date.isoformat()).execute()
 
         count = getattr(response, "count", None)
         if count is not None:
@@ -93,13 +97,12 @@ class SupabaseService:
             start_date.isoformat(),
             end_date.isoformat(),
         )
-        response = (
-            self._client.table("ramp_operations")
-            .select("vehicles_count, operation_date")
-            .gte("operation_date", start_date.isoformat())
-            .lte("operation_date", end_date.isoformat())
-            .execute()
-        )
+        query = self._client.table("ramp_operations")
+        if self._schema:
+            query = query.schema(self._schema)
+        response = query.select("vehicles_count, operation_date").gte(
+            "operation_date", start_date.isoformat()
+        ).lte("operation_date", end_date.isoformat()).execute()
 
         items: list[dict[str, Any]] = getattr(response, "data", [])
         total = sum(int(item.get("vehicles_count") or 0) for item in items)
@@ -171,9 +174,11 @@ class SupabaseService:
     def _fetch_containers(
         self, start_date: dt.date, end_date: dt.date, limit: int
     ) -> list[dict[str, Any]]:
+        query = self._client.table("containers")
+        if self._schema:
+            query = query.schema(self._schema)
         response = (
-            self._client.table("containers")
-            .select(
+            query.select(
                 "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
             )
             .gte("TARICH_PRIKA", start_date.isoformat())
@@ -187,9 +192,11 @@ class SupabaseService:
     def _fetch_vehicles(
         self, start_date: dt.date, end_date: dt.date, limit: int
     ) -> list[dict[str, Any]]:
+        query = self._client.table("ramp_operations")
+        if self._schema:
+            query = query.schema(self._schema)
         response = (
-            self._client.table("ramp_operations")
-            .select("vehicles_count,containers_count,operation_date,ramp_id,shift")
+            query.select("vehicles_count,containers_count,operation_date,ramp_id,shift")
             .gte("operation_date", start_date.isoformat())
             .lte("operation_date", end_date.isoformat())
             .order("operation_date", desc=False)
