@@ -1,0 +1,117 @@
+"""
+Configuration utilities for the WhatsApp bot service.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
+
+from dotenv import load_dotenv
+from pydantic import BaseModel, ValidationError
+
+
+class Settings(BaseModel):
+    """Runtime configuration loaded from environment variables."""
+
+    green_api_instance_id: str
+    green_api_token: str
+    supabase_url: str
+    supabase_service_role_key: str
+    supabase_schema: Optional[str] = None
+    bot_display_name: str = "Operations Bot"
+    gemini_api_key: Optional[str] = None
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """
+    Load settings from environment variables.
+
+    Uses python-dotenv to support local development with `.env` files.
+    """
+    load_dotenv()
+    credentials = _load_credentials_file()
+
+    try:
+        return Settings(
+            green_api_instance_id=_require_env("GREEN_API_INSTANCE_ID", credentials),
+            green_api_token=_require_env("GREEN_API_TOKEN", credentials),
+            supabase_url=_require_env("SUPABASE_URL", credentials),
+            supabase_service_role_key=_require_env(
+                "SUPABASE_SERVICE_ROLE_KEY", credentials
+            ),
+            supabase_schema=os.getenv("SUPABASE_SCHEMA") or credentials.get("supabase_schema"),
+            bot_display_name=os.getenv("BOT_DISPLAY_NAME", "Operations Bot"),
+            gemini_api_key=_optional_env("GEMINI_API_KEY", credentials),
+        )
+    except (ValidationError, KeyError) as exc:
+        missing = ", ".join(sorted(_missing_keys()))
+        raise RuntimeError(
+            "Missing required environment variables. "
+            f"Ensure the following keys are defined: {missing}"
+        ) from exc
+
+
+def _require_env(name: str, credentials: dict[str, str] | None = None) -> str:
+    credentials = credentials or {}
+    key_map = {
+        "SUPABASE_URL": "supabase_url",
+        "SUPABASE_SERVICE_ROLE_KEY": "supabase_service_role_key",
+        "GREEN_API_INSTANCE_ID": "green_api_instance_id",
+        "GREEN_API_TOKEN": "green_api_token",
+    }
+
+    value = os.getenv(name) or credentials.get(key_map.get(name, name.lower()))
+    if not value:
+        raise KeyError(name)
+    return value
+
+
+def _missing_keys() -> set[str]:
+    credentials = _load_credentials_file()
+    required = {
+        "GREEN_API_INSTANCE_ID",
+        "GREEN_API_TOKEN",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+    }
+    key_map = {
+        "SUPABASE_URL": "supabase_url",
+        "SUPABASE_SERVICE_ROLE_KEY": "supabase_service_role_key",
+        "GREEN_API_INSTANCE_ID": "green_api_instance_id",
+        "GREEN_API_TOKEN": "green_api_token",
+    }
+
+    missing: set[str] = set()
+    for key in required:
+        mapped = key_map.get(key, key.lower())
+        if not (os.getenv(key) or credentials.get(mapped)):
+            missing.add(key)
+    return missing
+
+
+def _optional_env(name: str, credentials: dict[str, str] | None = None) -> Optional[str]:
+    credentials = credentials or {}
+    key_map = {
+        "GEMINI_API_KEY": "gemini_api_key",
+    }
+    return os.getenv(name) or credentials.get(key_map.get(name, name.lower()))
+
+
+def _load_credentials_file() -> dict[str, str]:
+    credentials_path = Path(__file__).resolve().parent.parent / "config" / "supabase_credentials.json"
+    if not credentials_path.exists():
+        return {}
+
+    try:
+        with credentials_path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (json.JSONDecodeError, OSError) as exc:
+        raise RuntimeError(
+            f"Failed to read Supabase credentials file at {credentials_path}"
+        ) from exc
+
