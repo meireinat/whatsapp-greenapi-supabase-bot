@@ -109,3 +109,4 @@ Add `--dry-run` to preview without sending. The script reads credentials from `.
 
 All date expressions should use `dd/mm/yyyy` (or `dd-mm-yyyy`) format.
 
+# whatsapp-greenapi-supabase-bot
