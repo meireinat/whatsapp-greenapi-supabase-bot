@@ -12,6 +12,7 @@ from collections.abc import Mapping
 DATE_PATTERN = re.compile(
     r"(?P<day>\d{1,2})[./-](?P<month>\d{1,2})[./-](?P<year>\d{2,4})"
 )
+DATE_PATTERN_INLINE = r"\d{1,2}[./-]\d{1,2}[./-]\d{2,4}"
 
 
 @dataclasses.dataclass(slots=True)
@@ -33,7 +34,7 @@ class IntentEngine:
     RANGE_CONTAINER_PATTERNS = (
         re.compile(
             r"\bכמה\b.*\bמכולות\b.*?(?:בין|מתאריך)\s+(?P<from>{date}).*?(?:עד|ל)\s*(?P<to>{date})".format(
-                date=DATE_PATTERN.pattern
+                date=DATE_PATTERN_INLINE
             ),
             re.IGNORECASE,
         ),
@@ -42,7 +43,7 @@ class IntentEngine:
     RANGE_VEHICLES_PATTERNS = (
         re.compile(
             r"\bכמה\b.*\b(?:רכבים|vehicles)\b.*?(?:בין|מתאריך)\s+(?P<from>{date}).*?(?:עד|ל)\s*(?P<to>{date})".format(
-                date=DATE_PATTERN.pattern
+                date=DATE_PATTERN_INLINE
             ),
             re.IGNORECASE,
         ),
