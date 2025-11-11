@@ -72,9 +72,9 @@ Alternatively, run the contents of `sql/create_containers_table.sql` via the Sup
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - Optional: `SUPABASE_SCHEMA`, `BOT_DISPLAY_NAME`, `GEMINI_API_KEY`
-4. Railway uses Nixpacks or Docker automatically. The included `railway.json` (and `Dockerfile`) sets the start command to:
+4. Railway uses Nixpacks or Docker automatically. ה-start command מוגדר בקובץ `railway.json` כ־
    ```
-   uvicorn app.main:app --host 0.0.0.0 --port $PORT
+   sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
    ```
 5. Deploy the service. Once the deployment is healthy, copy the public URL (e.g. `https://my-bot.up.railway.app`) and configure Green API’s webhook to:
    ```
