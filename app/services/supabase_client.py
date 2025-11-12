@@ -112,23 +112,28 @@ class SupabaseService:
         self._http_base_url = f"{supabase_url}/rest/v1"
         
         # Verify that supabase_key is ASCII before creating headers
-        # Log for debugging but don't fail if there's an issue
+        # If it contains non-ASCII characters, try to clean it
         try:
             supabase_key.encode('ascii')
             logger.debug("supabase_key is ASCII (length: %d)", len(supabase_key))
+            clean_key = supabase_key
         except UnicodeEncodeError as e:
             logger.error(
                 "WARNING: supabase_key contains non-ASCII characters! "
                 "Length: %d, First 50 chars: %s, Error: %s. "
-                "This may cause issues with HTTP headers.",
+                "Attempting to clean the key...",
                 len(supabase_key), supabase_key[:50] if len(supabase_key) > 50 else supabase_key, e
             )
-            # Don't raise - just log the warning
-            # The headers will be checked later in get_containers_count_between
+            # Try to remove non-ASCII characters
+            # JWT tokens should only contain ASCII characters
+            clean_key = ''.join(c for c in supabase_key if ord(c) < 128)
+            logger.info("Cleaned supabase_key: length %d -> %d", len(supabase_key), len(clean_key))
+            if len(clean_key) != len(supabase_key):
+                logger.warning("Removed %d non-ASCII characters from supabase_key", len(supabase_key) - len(clean_key))
         
         self._http_headers = {
-            "apikey": supabase_key,
-            "Authorization": f"Bearer {supabase_key}",
+            "apikey": clean_key,
+            "Authorization": f"Bearer {clean_key}",
             "Content-Type": "application/json",
             "Prefer": "return=representation",
         }
