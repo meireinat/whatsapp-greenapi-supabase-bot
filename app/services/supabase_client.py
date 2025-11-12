@@ -283,7 +283,12 @@ class SupabaseService:
                     except UnicodeEncodeError:
                         # This variable contains non-ASCII characters
                         problematic_vars[key] = os.environ.pop(key, None)
-                        logger.debug("Removed problematic environment variable %s (contains non-ASCII)", key)
+                        logger.warning("Removed problematic environment variable %s (contains non-ASCII): %s", key, value[:50] if len(value) > 50 else value)
+            
+            # Log all remaining SUPABASE_* variables for debugging
+            remaining_supabase_vars = {k: v[:20] + "..." if len(v) > 20 else v for k, v in os.environ.items() if k.startswith("SUPABASE_")}
+            if remaining_supabase_vars:
+                logger.info("Remaining SUPABASE_* environment variables: %s", list(remaining_supabase_vars.keys()))
             
             try:
                 request_headers = {
