@@ -85,9 +85,14 @@ class IntentEngine:
     )
 
     def match(self, text: str) -> IntentResult | None:
+        import logging
+        logger = logging.getLogger(__name__)
+        
         stripped = text.strip()
         if not stripped:
             return None
+
+        logger.info("Matching intent for text: %s (length: %d)", stripped, len(stripped))
 
         for pattern in self.DAILY_CONTAINER_PATTERNS:
             if pattern.search(stripped):
@@ -116,15 +121,19 @@ class IntentEngine:
                         parameters=dates,
                     )
 
-        for pattern in self.MONTHLY_CONTAINER_PATTERNS:
+        for i, pattern in enumerate(self.MONTHLY_CONTAINER_PATTERNS):
             match = pattern.search(stripped)
             if match:
+                logger.info("MONTHLY_CONTAINER_PATTERNS[%d] matched: %s", i, match.groupdict())
                 month_params = self._parse_month(match.groupdict())
                 if month_params:
+                    logger.info("Parsed month params: %s", month_params)
                     return IntentResult(
                         name="containers_count_monthly",
                         parameters=month_params,
                     )
+                else:
+                    logger.warning("Failed to parse month from: %s", match.groupdict())
 
         for pattern in self.LLM_ANALYSIS_PATTERNS:
             match = pattern.search(stripped)
@@ -135,6 +144,7 @@ class IntentEngine:
                     params.update(dates)
                 return IntentResult(name="llm_analysis", parameters=params)
 
+        logger.info("No intent matched for text: %s", stripped)
         return None
 
     def _parse_range(self, groups: Mapping[str, str]) -> dict[str, dt.date] | None:
