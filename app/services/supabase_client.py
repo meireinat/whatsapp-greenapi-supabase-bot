@@ -184,16 +184,24 @@ class SupabaseService:
         query = self._client.table("containers")
         if self._schema:
             query = query.schema(self._schema)
-        response = (
-            query.select(
-                "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
+        try:
+            response = (
+                query.select(
+                    "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
+                )
+                .gte("TARICH_PRIKA", start_date.isoformat())
+                .lte("TARICH_PRIKA", end_date.isoformat())
+                .order("TARICH_PRIKA", desc=False)
+                .limit(limit)
+                .execute()
             )
-            .gte("TARICH_PRIKA", start_date.isoformat())
-            .lte("TARICH_PRIKA", end_date.isoformat())
-            .order("TARICH_PRIKA", desc=False)
-            .limit(limit)
-            .execute()
-        )
+        except UnicodeEncodeError:
+            logger.error(
+                "Supabase query for containers failed due to Unicode header encoding. "
+                "Verify schema/table names are ASCII. Returning empty result."
+            )
+            return []
+
         return list(getattr(response, "data", []))
 
     def _fetch_vehicles(
@@ -202,14 +210,24 @@ class SupabaseService:
         query = self._client.table("ramp_operations")
         if self._schema:
             query = query.schema(self._schema)
-        response = (
-            query.select("vehicles_count,containers_count,operation_date,ramp_id,shift")
-            .gte("operation_date", start_date.isoformat())
-            .lte("operation_date", end_date.isoformat())
-            .order("operation_date", desc=False)
-            .limit(limit)
-            .execute()
-        )
+        try:
+            response = (
+                query.select(
+                    "vehicles_count,containers_count,operation_date,ramp_id,shift"
+                )
+                .gte("operation_date", start_date.isoformat())
+                .lte("operation_date", end_date.isoformat())
+                .order("operation_date", desc=False)
+                .limit(limit)
+                .execute()
+            )
+        except UnicodeEncodeError:
+            logger.error(
+                "Supabase query for vehicles failed due to Unicode header encoding. "
+                "Verify schema/table names are ASCII. Returning empty result."
+            )
+            return []
+
         return list(getattr(response, "data", []))
 
     def log_query(
