@@ -187,8 +187,11 @@ async def handle_webhook(
     elif intent.name == "containers_count_monthly":
         month = intent.parameters["month"]
         year = intent.parameters["year"]
+        logger.info("Fetching monthly containers: month=%d, year=%d", month, year)
         count = supabase_service.get_containers_count_monthly(month, year)
+        logger.info("Monthly containers count result: %d", count)
         response_text = build_monthly_containers_response(count, month, year)
+        logger.info("Response text: %s", response_text)
     elif intent.name == "llm_analysis":
         if not gemini_service:
             response_text = build_fallback_response()

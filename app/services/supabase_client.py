@@ -89,10 +89,12 @@ class SupabaseService:
         
         Note: TARICH_PRIKA is stored as YYYYMMDD format (string) in the database.
         """
-        logger.debug(
-            "Fetching container count between %s and %s",
+        logger.info(
+            "Fetching container count between %s and %s (YYYYMMDD: %s to %s)",
             start_date.isoformat(),
             end_date.isoformat(),
+            start_date.strftime("%Y%m%d"),
+            end_date.strftime("%Y%m%d"),
         )
         try:
             query = self._client.table("containers")
@@ -101,11 +103,13 @@ class SupabaseService:
             # Convert dates to YYYYMMDD format for comparison
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
+            logger.debug("Query: TARICH_PRIKA >= %s AND TARICH_PRIKA <= %s", start_str, end_str)
             response = query.select("SHANA", count="exact").gte(
                 "TARICH_PRIKA", start_str
             ).lte("TARICH_PRIKA", end_str).execute()
 
             count = getattr(response, "count", None)
+            logger.info("Query response count: %s", count)
             if count is not None:
                 return int(count)
 
@@ -155,7 +159,7 @@ class SupabaseService:
         """
         Count containers unloaded in a specific month and year.
         """
-        logger.debug("Fetching container count for %d/%d", month, year)
+        logger.info("Fetching monthly container count for month=%d, year=%d", month, year)
         try:
             # Calculate first and last day of the month
             if month == 12:
@@ -165,7 +169,12 @@ class SupabaseService:
                 start_date = dt.date(year, month, 1)
                 end_date = dt.date(year, month + 1, 1) - dt.timedelta(days=1)
             
-            return self.get_containers_count_between(start_date, end_date)
+            logger.info("Monthly date range: %s to %s (YYYYMMDD: %s to %s)", 
+                       start_date.isoformat(), end_date.isoformat(),
+                       start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"))
+            count = self.get_containers_count_between(start_date, end_date)
+            logger.info("Monthly container count result: %d", count)
+            return count
         except Exception as e:
             logger.error(
                 "Error fetching monthly containers count for %d/%d: %s",
