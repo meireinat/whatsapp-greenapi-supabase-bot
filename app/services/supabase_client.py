@@ -76,13 +76,27 @@ class SupabaseService:
         
         self._schema: str | None = None  # Always None to avoid encoding issues
 
+    def _safe_table_access(self, table_name: str):
+        """
+        Safely access a Supabase table by temporarily removing SUPABASE_SCHEMA
+        from environment to prevent UnicodeEncodeError.
+        """
+        import os
+        original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
+        try:
+            return self._client.table(table_name)
+        finally:
+            # Restore original value if it existed
+            if original_schema:
+                os.environ["SUPABASE_SCHEMA"] = original_schema
+
     def get_daily_containers_count(self, target_date: dt.date) -> int:
         """
         Count containers unloaded on a specific date.
         """
         logger.debug("Fetching container count for %s", target_date.isoformat())
         try:
-            query = self._client.table("containers")
+            query = self._safe_table_access("containers")
             # Note: schema() is not supported by Supabase Python client
             # All queries use the default schema (usually 'public')
             # Convert date to YYYYMMDD format for comparison
@@ -132,20 +146,8 @@ class SupabaseService:
             end_date.strftime("%Y%m%d"),
         )
         try:
-            # Try to access table - this may trigger _init_postgrest_client
-            # which can fail if schema contains non-ASCII characters
-            try:
-                query = self._client.table("containers")
-            except UnicodeEncodeError as e:
-                logger.error(
-                    "UnicodeEncodeError when accessing table 'containers': %s. "
-                    "This is likely caused by SUPABASE_SCHEMA environment variable "
-                    "containing non-ASCII characters. Please remove or fix SUPABASE_SCHEMA in Railway. "
-                    "Returning 0.",
-                    e,
-                    exc_info=True,
-                )
-                return 0
+            # Use safe table access to prevent UnicodeEncodeError
+            query = self._safe_table_access("containers")
             
             # Note: schema() is not supported by Supabase Python client
             # All queries use the default schema (usually 'public')
@@ -199,7 +201,7 @@ class SupabaseService:
             end_date.isoformat(),
         )
         try:
-            query = self._client.table("ramp_operations")
+            query = self._safe_table_access("ramp_operations")
             # Note: schema() is not supported by Supabase Python client
             # All queries use the default schema (usually 'public')
             response = query.select("vehicles_count, operation_date").gte(
@@ -316,7 +318,7 @@ class SupabaseService:
         self, start_date: dt.date, end_date: dt.date, limit: int
     ) -> list[dict[str, Any]]:
         try:
-            query = self._client.table("containers")
+            query = self._safe_table_access("containers")
             # Note: schema() is not supported by Supabase Python client
             # All queries use the default schema (usually 'public')
             # Convert dates to YYYYMMDD format for comparison
@@ -346,7 +348,7 @@ class SupabaseService:
         self, start_date: dt.date, end_date: dt.date, limit: int
     ) -> list[dict[str, Any]]:
         try:
-            query = self._client.table("ramp_operations")
+            query = self._safe_table_access("ramp_operations")
             # Note: schema() is not supported by Supabase Python client
             # All queries use the default schema (usually 'public')
             response = (
@@ -392,7 +394,7 @@ class SupabaseService:
                     safe_parameters[key] = str(value)
             
             # Use table without schema to avoid encoding issues
-            query = self._client.table("bot_queries_log")
+            query = self._safe_table_access("bot_queries_log")
             # Note: schema() is not supported by Supabase Python client
             # All queries use the default schema (usually 'public')
             
@@ -427,7 +429,7 @@ class SupabaseService:
         """
         for index, batch in enumerate(_chunked(rows, batch_size), start=1):
             logger.info("Uploading batch %s to table %s", index, table)
-            self._client.table(table).insert(batch).execute()
+            self._safe_table_access(table).insert(batch).execute()
 
 
 def _chunked(iterable: Iterable[dict[str, Any]], size: int) -> Iterable[List[dict[str, Any]]]:
