@@ -257,18 +257,30 @@ class SupabaseService:
             
             # Make request using requests library directly
             # This avoids UnicodeEncodeError issues with httpx and environment variables
-            request_headers = {
-                **self._http_headers,
-                "Range-Unit": "items",
-                "Prefer": "count=exact",
-            }
-            full_url = f"{self._http_base_url}{url}"
-            logger.info("Making GET request to: %s", full_url)
-            response = requests.get(
-                full_url,
-                headers=request_headers,
-                timeout=self._http_timeout,
-            )
+            # IMPORTANT: Remove SUPABASE_SCHEMA from environment before making request
+            # because requests/urllib3 reads it and tries to encode it as latin-1
+            import os
+            original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
+            if "SUPABASE_SCHEMA" in os.environ:
+                os.environ.pop("SUPABASE_SCHEMA", None)
+            
+            try:
+                request_headers = {
+                    **self._http_headers,
+                    "Range-Unit": "items",
+                    "Prefer": "count=exact",
+                }
+                full_url = f"{self._http_base_url}{url}"
+                logger.info("Making GET request to: %s", full_url)
+                response = requests.get(
+                    full_url,
+                    headers=request_headers,
+                    timeout=self._http_timeout,
+                )
+            finally:
+                # Never restore SUPABASE_SCHEMA to avoid encoding issues
+                if original_schema:
+                    logger.debug("SUPABASE_SCHEMA removed before making request, will not be restored")
             logger.info("Response status: %s", response.status_code)
             logger.info("Response headers: %s", dict(response.headers))
             response.raise_for_status()
