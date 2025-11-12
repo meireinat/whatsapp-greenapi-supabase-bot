@@ -81,9 +81,11 @@ async def handle_webhook(
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Depends(get_webhook_token),
 ) -> Response:
-    logger.info("Webhook received: typeWebhook=%s, hasAuth=%s", 
+    logger.info("=== WEBHOOK RECEIVED ===")
+    logger.info("Type: %s, HasAuth: %s, Timestamp: %s", 
                 getattr(payload, 'typeWebhook', 'unknown'),
-                authorization is not None)
+                authorization is not None,
+                getattr(payload, 'timestamp', 'unknown'))
     
     if webhook_token:
         if not authorization:
@@ -97,8 +99,10 @@ async def handle_webhook(
 
     # Only process incomingMessageReceived webhooks
     if payload.typeWebhook != "incomingMessageReceived":
-        logger.info("Ignoring webhook type: %s", payload.typeWebhook)
+        logger.info("Ignoring webhook type: %s (not incomingMessageReceived)", payload.typeWebhook)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+    
+    logger.info("Processing incomingMessageReceived webhook")
 
     # Validate that we have the required fields for incoming messages
     if not payload.messageData or not payload.senderData:
@@ -172,14 +176,28 @@ async def handle_webhook(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Intent not implemented"
         )
 
-    logger.info("Sending response to %s: %s", chat_id, response_text[:100])
-    background_tasks.add_task(green_api_client.send_text_message, chat_id, response_text)
-    supabase_service.log_query(
-        user_phone=chat_id,
-        user_text=incoming_text,
-        intent=intent.name,
-        parameters=dict(intent.parameters),
-        response_text=response_text,
-    )
+    logger.info("=== PREPARING RESPONSE ===")
+    logger.info("Chat ID: %s, Response length: %d chars", chat_id, len(response_text))
+    logger.info("Response preview: %s", response_text[:150])
+    
+    try:
+        background_tasks.add_task(green_api_client.send_text_message, chat_id, response_text)
+        logger.info("Message queued for sending to %s", chat_id)
+    except Exception as e:
+        logger.error("Failed to queue message: %s", e, exc_info=True)
+    
+    try:
+        supabase_service.log_query(
+            user_phone=chat_id,
+            user_text=incoming_text,
+            intent=intent.name,
+            parameters=dict(intent.parameters),
+            response_text=response_text,
+        )
+        logger.info("Query logged to Supabase")
+    except Exception as e:
+        logger.error("Failed to log query: %s", e, exc_info=True)
+    
+    logger.info("=== WEBHOOK PROCESSING COMPLETE ===")
     return Response(status_code=status.HTTP_202_ACCEPTED)
 
