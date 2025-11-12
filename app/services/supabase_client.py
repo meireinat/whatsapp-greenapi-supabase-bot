@@ -8,6 +8,7 @@ import datetime as dt
 import logging
 from typing import Any, Iterable, List, Mapping
 
+import httpx
 from supabase import Client, create_client
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,18 @@ class SupabaseService:
         self._schema: str | None = None  # Always None to avoid encoding issues
         self._supabase_url = supabase_url
         self._supabase_key = supabase_key
+        # Create httpx client for direct PostgREST API calls to avoid UnicodeEncodeError
+        # This bypasses the Supabase Python client's schema handling
+        self._http_client = httpx.Client(
+            base_url=f"{supabase_url}/rest/v1",
+            headers={
+                "apikey": supabase_key,
+                "Authorization": f"Bearer {supabase_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation",
+            },
+            timeout=30.0,
+        )
 
     def _safe_table_access(self, table_name: str):
         """
@@ -223,43 +236,49 @@ class SupabaseService:
             end_date.strftime("%Y%m%d"),
         )
         try:
-            # Use safe table access to prevent UnicodeEncodeError
-            query = self._safe_table_access("containers")
-            
-            # Note: schema() is not supported by Supabase Python client
-            # All queries use the default schema (usually 'public')
+            # Use httpx directly to avoid UnicodeEncodeError from Supabase client
             # Convert dates to YYYYMMDD format for comparison
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
             logger.debug("Query: TARICH_PRIKA >= %s AND TARICH_PRIKA <= %s", start_str, end_str)
             
-            # Build query step by step to catch encoding errors early
-            try:
-                query = query.select("SHANA", count="exact")
-                query = query.gte("TARICH_PRIKA", start_str)
-                query = query.lte("TARICH_PRIKA", end_str)
-                response = query.execute()
-            except UnicodeEncodeError as e:
-                logger.error(
-                    "UnicodeEncodeError during query construction/execution: %s. "
-                    "This may be caused by non-ASCII characters in Supabase configuration. "
-                    "Returning 0.",
-                    e,
-                    exc_info=True,
-                )
-                return 0
-
-            count = getattr(response, "count", None)
-            logger.info("Query response count: %s", count)
-            if count is not None:
-                return int(count)
-
-            items: list[dict[str, Any]] = getattr(response, "data", [])
-            return int(len(items))
-        except UnicodeEncodeError as e:
+            # Use PostgREST API directly via httpx to avoid schema encoding issues
+            # PostgREST uses query parameters like: TARICH_PRIKA=gte.20240101&TARICH_PRIKA=lte.20240131
+            # We need to use a list for multiple values with the same key
+            from urllib.parse import urlencode
+            query_params = urlencode([
+                ("select", "SHANA"),
+                ("TARICH_PRIKA", f"gte.{start_str}"),
+                ("TARICH_PRIKA", f"lte.{end_str}"),
+            ])
+            response = self._http_client.get(
+                f"/containers?{query_params}",
+                headers={
+                    **self._http_client.headers,
+                    "Range-Unit": "items",
+                    "Prefer": "count=exact",
+                },
+            )
+            response.raise_for_status()
+            
+            # Get count from Content-Range header if available
+            content_range = response.headers.get("Content-Range", "")
+            if content_range:
+                # Format: "0-9/100" where 100 is the total count
+                parts = content_range.split("/")
+                if len(parts) == 2 and parts[1].isdigit():
+                    count = int(parts[1])
+                    logger.info("Query response count from header: %s", count)
+                    return count
+            
+            # Fallback to counting items in response
+            data = response.json()
+            count = len(data) if isinstance(data, list) else 0
+            logger.info("Query response count from data length: %s", count)
+            return count
+        except Exception as e:
             logger.error(
-                "UnicodeEncodeError when fetching containers count between dates: %s. "
-                "This may be caused by non-ASCII characters in Supabase configuration. "
+                "Error when fetching containers count between dates: %s. "
                 "Returning 0.",
                 e,
                 exc_info=True,
