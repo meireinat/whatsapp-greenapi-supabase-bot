@@ -50,6 +50,26 @@ class IntentEngine:
     )
 
     MONTHLY_CONTAINER_PATTERNS = (
+        # Hebrew: "כמה מכולות בינואר 2024" or "כמה מכולות בחודש ינואר 2024"
+        # Use \S+ to match any non-whitespace characters (including Hebrew)
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s*(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s*(?P<month_name>\S+)",
+            re.IGNORECASE,
+        ),
+        # Also support without "חודש": "כמה מכולות בינואר 2024"
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?ב(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?ב(?P<month_name>\S+)",
+            re.IGNORECASE,
+        ),
+        # English month names
         re.compile(
             r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s*(?P<month_name>\w+)\s+(?P<year>\d{2,4})",
             re.IGNORECASE,
@@ -172,12 +192,16 @@ class IntentEngine:
             "september": 9, "october": 10, "november": 11, "december": 12,
         }
         
-        month_name = groups.get("month_name", "").strip().lower()
+        month_name = groups.get("month_name", "").strip()
         if not month_name:
             return None
         
-        # Try Hebrew first, then English
-        month_num = month_names_he.get(month_name) or month_names_en.get(month_name)
+        # Try Hebrew first (case-sensitive for Hebrew)
+        month_num = month_names_he.get(month_name)
+        # Then try English (case-insensitive)
+        if not month_num:
+            month_num = month_names_en.get(month_name.lower())
+        
         if not month_num:
             return None
         
