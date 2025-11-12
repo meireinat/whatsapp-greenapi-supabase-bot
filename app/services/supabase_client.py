@@ -8,7 +8,7 @@ import datetime as dt
 import logging
 from typing import Any, Iterable, List, Mapping
 
-import httpx
+import requests
 from supabase import Client, create_client
 
 logger = logging.getLogger(__name__)
@@ -102,18 +102,17 @@ class SupabaseService:
         self._supabase_url = supabase_url
         self._supabase_key = supabase_key
         
-        # Store parameters for lazy initialization of httpx client
-        # We'll create the client only when needed to avoid UnicodeEncodeError
-        # during application startup
-        self._http_client: httpx.Client | None = None
-        self._http_client_base_url = f"{supabase_url}/rest/v1"
-        self._http_client_headers = {
+        # Store parameters for direct HTTP requests using requests library
+        # We use requests instead of httpx to avoid UnicodeEncodeError issues
+        # with environment variables containing non-ASCII characters
+        self._http_base_url = f"{supabase_url}/rest/v1"
+        self._http_headers = {
             "apikey": supabase_key,
             "Authorization": f"Bearer {supabase_key}",
             "Content-Type": "application/json",
             "Prefer": "return=representation",
         }
-        self._http_client_timeout = 30.0
+        self._http_timeout = 30.0
 
     def _safe_table_access(self, table_name: str):
         """
@@ -221,51 +220,6 @@ class SupabaseService:
             )
             return 0
 
-    def _get_http_client(self) -> httpx.Client:
-        """
-        Lazy initialization of httpx client to avoid UnicodeEncodeError during startup.
-        Creates the client only when needed, after SUPABASE_SCHEMA has been removed.
-        """
-        if self._http_client is None:
-            import os
-            # Make absolutely sure SUPABASE_SCHEMA is removed before creating client
-            original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
-            if "SUPABASE_SCHEMA" in os.environ:
-                os.environ.pop("SUPABASE_SCHEMA", None)
-            
-            try:
-                self._http_client = httpx.Client(
-                    base_url=self._http_client_base_url,
-                    headers=self._http_client_headers,
-                    timeout=self._http_client_timeout,
-                )
-                logger.info("httpx.Client created successfully (lazy initialization)")
-            except UnicodeEncodeError as e:
-                logger.error(
-                    "UnicodeEncodeError when creating httpx.Client: %s. "
-                    "Removing all SUPABASE_* vars except URL and KEY...",
-                    e,
-                    exc_info=True,
-                )
-                # Remove all SUPABASE_* variables except URL and KEY
-                for key in list(os.environ.keys()):
-                    if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
-                        removed = os.environ.pop(key, None)
-                        if removed:
-                            logger.warning("Removed %s from environment", key)
-                # Try again
-                self._http_client = httpx.Client(
-                    base_url=self._http_client_base_url,
-                    headers=self._http_client_headers,
-                    timeout=self._http_client_timeout,
-                )
-                logger.info("httpx.Client created successfully after removing problematic environment variables")
-            finally:
-                # Never restore SUPABASE_SCHEMA
-                if original_schema:
-                    logger.debug("SUPABASE_SCHEMA removed before creating httpx.Client, will not be restored")
-        
-        return self._http_client
 
     def get_containers_count_between(
         self, start_date: dt.date, end_date: dt.date
@@ -301,17 +255,19 @@ class SupabaseService:
             url = f"/containers?{query_params}"
             logger.info("PostgREST URL: %s", url)
             
-            # Get httpx client (lazy initialization)
-            http_client = self._get_http_client()
-            
-            # Make request with proper headers for count
-            response = http_client.get(
-                url,
-                headers={
-                    **http_client.headers,
-                    "Range-Unit": "items",
-                    "Prefer": "count=exact",
-                },
+            # Make request using requests library directly
+            # This avoids UnicodeEncodeError issues with httpx and environment variables
+            request_headers = {
+                **self._http_headers,
+                "Range-Unit": "items",
+                "Prefer": "count=exact",
+            }
+            full_url = f"{self._http_base_url}{url}"
+            logger.info("Making GET request to: %s", full_url)
+            response = requests.get(
+                full_url,
+                headers=request_headers,
+                timeout=self._http_timeout,
             )
             logger.info("Response status: %s", response.status_code)
             logger.info("Response headers: %s", dict(response.headers))
@@ -340,13 +296,12 @@ class SupabaseService:
             else:
                 logger.warning("Response data is not a list: %s", type(data))
                 return 0
-        except httpx.HTTPStatusError as e:
+        except requests.exceptions.HTTPError as e:
             logger.error(
-                "HTTP error when fetching containers count: %s - %s. "
+                "HTTP error when fetching containers count: %s. "
                 "Response: %s. Returning 0.",
-                e.response.status_code,
-                e.response.reason_phrase,
-                e.response.text[:500] if e.response.text else "No response body",
+                e,
+                e.response.text[:500] if e.response else "No response body",
                 exc_info=True,
             )
             return 0
