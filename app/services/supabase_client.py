@@ -144,6 +144,30 @@ class SupabaseService:
             )
             return 0
 
+    def get_containers_count_monthly(self, month: int, year: int) -> int:
+        """
+        Count containers unloaded in a specific month and year.
+        """
+        logger.debug("Fetching container count for %d/%d", month, year)
+        try:
+            # Calculate first and last day of the month
+            if month == 12:
+                start_date = dt.date(year, month, 1)
+                end_date = dt.date(year + 1, 1, 1) - dt.timedelta(days=1)
+            else:
+                start_date = dt.date(year, month, 1)
+                end_date = dt.date(year, month + 1, 1) - dt.timedelta(days=1)
+            
+            return self.get_containers_count_between(start_date, end_date)
+        except Exception as e:
+            logger.error(
+                "Error fetching monthly containers count for %d/%d: %s",
+                month,
+                year,
+                e,
+            )
+            return 0
+
     def get_metrics_summary(
         self,
         *,

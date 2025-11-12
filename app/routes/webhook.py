@@ -21,6 +21,7 @@ from app.services.response_builder import (
     build_containers_range_response,
     build_daily_containers_response,
     build_fallback_response,
+    build_monthly_containers_response,
     build_vehicles_range_response,
 )
 from app.services.supabase_client import SupabaseService
@@ -144,6 +145,11 @@ async def handle_webhook(
         end_date = intent.parameters["end_date"]
         count = supabase_service.get_vehicle_count_between(start_date, end_date)
         response_text = build_vehicles_range_response(count, start_date, end_date)
+    elif intent.name == "containers_count_monthly":
+        month = intent.parameters["month"]
+        year = intent.parameters["year"]
+        count = supabase_service.get_containers_count_monthly(month, year)
+        response_text = build_monthly_containers_response(count, month, year)
     elif intent.name == "llm_analysis":
         if not gemini_service:
             response_text = build_fallback_response()

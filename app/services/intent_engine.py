@@ -49,6 +49,17 @@ class IntentEngine:
         ),
     )
 
+    MONTHLY_CONTAINER_PATTERNS = (
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s+(?P<month_name>\w+)\s+(?P<year>\d{2,4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s+(?P<month_name>\w+)",
+            re.IGNORECASE,
+        ),
+    )
+
     LLM_ANALYSIS_PATTERNS = (
         re.compile(r"\b(?:ניתוח|נתח|גמיני|Gemini|AI)\b", re.IGNORECASE),
     )
@@ -83,6 +94,16 @@ class IntentEngine:
                     return IntentResult(
                         name="vehicles_count_between",
                         parameters=dates,
+                    )
+
+        for pattern in self.MONTHLY_CONTAINER_PATTERNS:
+            match = pattern.search(stripped)
+            if match:
+                month_params = self._parse_month(match.groupdict())
+                if month_params:
+                    return IntentResult(
+                        name="containers_count_monthly",
+                        parameters=month_params,
                     )
 
         for pattern in self.LLM_ANALYSIS_PATTERNS:
@@ -136,4 +157,38 @@ class IntentEngine:
         if first > second:
             first, second = second, first
         return {"start_date": first, "end_date": second}
+
+    @staticmethod
+    def _parse_month(groups: Mapping[str, str]) -> dict[str, int] | None:
+        """Parse month name and year from Hebrew or English."""
+        month_names_he = {
+            "ינואר": 1, "פברואר": 2, "מרץ": 3, "מרס": 3, "מארס": 3,
+            "אפריל": 4, "מאי": 5, "יוני": 6, "יולי": 7, "אוגוסט": 8,
+            "ספטמבר": 9, "אוקטובר": 10, "נובמבר": 11, "דצמבר": 12,
+        }
+        month_names_en = {
+            "january": 1, "february": 2, "march": 3, "april": 4,
+            "may": 5, "june": 6, "july": 7, "august": 8,
+            "september": 9, "october": 10, "november": 11, "december": 12,
+        }
+        
+        month_name = groups.get("month_name", "").strip().lower()
+        if not month_name:
+            return None
+        
+        # Try Hebrew first, then English
+        month_num = month_names_he.get(month_name) or month_names_en.get(month_name)
+        if not month_num:
+            return None
+        
+        # Parse year (default to current year if not provided)
+        year_text = groups.get("year", "")
+        if year_text:
+            year = int(year_text)
+            if year < 100:
+                year += 2000 if year < 80 else 1900
+        else:
+            year = dt.date.today().year
+        
+        return {"month": month_num, "year": year}
 

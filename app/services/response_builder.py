@@ -33,6 +33,19 @@ def build_vehicles_range_response(
     )
 
 
+def build_monthly_containers_response(count: int, month: int, year: int) -> str:
+    """Build response for monthly container count query."""
+    month_names_he = {
+        1: "ינואר", 2: "פברואר", 3: "מרץ", 4: "אפריל",
+        5: "מאי", 6: "יוני", 7: "יולי", 8: "אוגוסט",
+        9: "ספטמבר", 10: "אוקטובר", 11: "נובמבר", 12: "דצמבר",
+    }
+    month_name = month_names_he.get(month, f"חודש {month}")
+    return (
+        f"בחודש {month_name} {year} נפרקו {count} מכולות."
+    )
+
+
 def build_fallback_response() -> str:
     return (
         "מצטער, לא הצלחתי להבין את הבקשה. "
