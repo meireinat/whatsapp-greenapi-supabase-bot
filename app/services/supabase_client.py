@@ -310,11 +310,23 @@ class SupabaseService:
                             # Check if it's ASCII (HTTP headers must be ASCII)
                             v.encode('ascii')
                             safe_headers[k] = v
-                        except UnicodeEncodeError:
+                        except UnicodeEncodeError as e:
+                            # Log the actual value to debug
+                            logger.error(
+                                "Header %s contains non-ASCII characters. "
+                                "Value length: %d, First 50 chars: %s, Error: %s",
+                                k, len(v), v[:50] if len(v) > 50 else v, e
+                            )
                             # Skip non-ASCII headers
                             logger.warning("Skipping header %s with non-ASCII value", k)
                     else:
                         safe_headers[k] = v
+                
+                # Log what headers we're actually sending
+                logger.info("Sending headers: %s", list(safe_headers.keys()))
+                if 'apikey' not in safe_headers or 'Authorization' not in safe_headers:
+                    logger.error("CRITICAL: Missing required headers! apikey: %s, Authorization: %s", 
+                               'apikey' in safe_headers, 'Authorization' in safe_headers)
                 
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
