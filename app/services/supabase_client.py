@@ -295,6 +295,44 @@ class SupabaseService:
                         error_msg = f"HTTP {status_code}: {response_data[:500].decode('utf-8', errors='replace')}"
                         logger.error("HTTP error when fetching containers count: %s. Returning 0.", error_msg)
                         return 0
+                    
+                    # Get count from Content-Range header if available
+                    content_range = response_headers.get("Content-Range", "")
+                    logger.info("Content-Range header: %s", content_range)
+                    if content_range:
+                        # Format: "0-9/100" where 100 is the total count
+                        parts = content_range.split("/")
+                        if len(parts) == 2 and parts[1].isdigit():
+                            count = int(parts[1])
+                            logger.info("Query response count from Content-Range header: %s", count)
+                            return count
+                        else:
+                            logger.warning("Content-Range header format unexpected: %s", content_range)
+                    
+                    # Fallback to counting items in response
+                    try:
+                        data = json.loads(response_data.decode('utf-8'))
+                        logger.info("Response data type: %s, length: %s", type(data), len(data) if isinstance(data, list) else "N/A")
+                        if isinstance(data, list):
+                            count = len(data)
+                            logger.info("Query response count from data length: %s", count)
+                            # If we got a limited result set, the count might be in Content-Range
+                            # But if Content-Range wasn't available, we return the length
+                            # NOTE: This might not be accurate if PostgREST limits results
+                            if count > 0:
+                                logger.warning(
+                                    "Got %d items in response but no Content-Range header. "
+                                    "This might be a partial result. Consider using count=exact header.",
+                                    count
+                                )
+                            return count
+                        else:
+                            logger.warning("Response data is not a list: %s", type(data))
+                            logger.warning("Response data content: %s", str(data)[:500])
+                            return 0
+                    except json.JSONDecodeError as e:
+                        logger.error("Failed to parse JSON response: %s. Response: %s", e, response_data[:500])
+                        return 0
             except UnicodeEncodeError as e:
                 logger.error(
                     "UnicodeEncodeError when making request: %s. "
@@ -315,44 +353,6 @@ class SupabaseService:
                 # Never restore SUPABASE_SCHEMA or other removed variables
                 if all_removed:
                     logger.debug("Removed SUPABASE_* variables before making request, will not be restored")
-            
-            # Get count from Content-Range header if available
-            content_range = response_headers.get("Content-Range", "")
-            logger.info("Content-Range header: %s", content_range)
-            if content_range:
-                # Format: "0-9/100" where 100 is the total count
-                parts = content_range.split("/")
-                if len(parts) == 2 and parts[1].isdigit():
-                    count = int(parts[1])
-                    logger.info("Query response count from Content-Range header: %s", count)
-                    return count
-                else:
-                    logger.warning("Content-Range header format unexpected: %s", content_range)
-            
-            # Fallback to counting items in response
-            try:
-                data = json.loads(response_data.decode('utf-8'))
-                logger.info("Response data type: %s, length: %s", type(data), len(data) if isinstance(data, list) else "N/A")
-                if isinstance(data, list):
-                    count = len(data)
-                    logger.info("Query response count from data length: %s", count)
-                    # If we got a limited result set, the count might be in Content-Range
-                    # But if Content-Range wasn't available, we return the length
-                    # NOTE: This might not be accurate if PostgREST limits results
-                    if count > 0:
-                        logger.warning(
-                            "Got %d items in response but no Content-Range header. "
-                            "This might be a partial result. Consider using count=exact header.",
-                            count
-                        )
-                    return count
-                else:
-                    logger.warning("Response data is not a list: %s", type(data))
-                    logger.warning("Response data content: %s", str(data)[:500])
-                    return 0
-            except json.JSONDecodeError as e:
-                logger.error("Failed to parse JSON response: %s. Response: %s", e, response_data[:500])
-                return 0
         except Exception as e:
             logger.error(
                 "Error when fetching containers count between dates: %s. "
