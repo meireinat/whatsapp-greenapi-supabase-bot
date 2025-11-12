@@ -259,11 +259,12 @@ class SupabaseService:
             
             # Make request using urllib.request directly to avoid encoding issues
             # with environment variables containing non-ASCII characters
-            # urllib.request doesn't read environment variables like requests/urllib3 does
+            # IMPORTANT: Remove SUPABASE_SCHEMA from environment BEFORE creating Request
+            # because urllib.request/http.client reads it during Request initialization
             import os
             # Remove ALL SUPABASE_* variables except URL and KEY to be safe
             # This ensures no environment variable with non-ASCII characters
-            # is read by any library
+            # is read by any library (urllib.request, http.client, etc.)
             all_removed = {}
             for key in list(os.environ.keys()):
                 if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
@@ -272,17 +273,42 @@ class SupabaseService:
                         all_removed[key] = removed
                         logger.debug("Removed %s from environment before request", key)
             
+            # Also check for any other environment variables that might contain non-ASCII
+            # and remove them temporarily
+            problematic_vars = {}
+            for key, value in list(os.environ.items()):
+                if isinstance(value, str):
+                    try:
+                        value.encode('latin-1')
+                    except UnicodeEncodeError:
+                        # This variable contains non-ASCII characters
+                        problematic_vars[key] = os.environ.pop(key, None)
+                        logger.debug("Removed problematic environment variable %s (contains non-ASCII)", key)
+            
             try:
                 request_headers = {
                     **self._http_headers,
                     "Range-Unit": "items",
                     "Prefer": "count=exact",
                 }
+                # Ensure all header values are ASCII-safe
+                safe_headers = {}
+                for k, v in request_headers.items():
+                    if isinstance(v, str):
+                        try:
+                            v.encode('latin-1')
+                            safe_headers[k] = v
+                        except UnicodeEncodeError:
+                            # Skip non-ASCII headers or encode them
+                            logger.warning("Skipping header %s with non-ASCII value", k)
+                    else:
+                        safe_headers[k] = v
+                
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
                 
                 # Use urllib.request directly to avoid encoding issues
-                req = urllib.request.Request(full_url, headers=request_headers)
+                req = urllib.request.Request(full_url, headers=safe_headers)
                 with urllib.request.urlopen(req, timeout=self._http_timeout) as response:
                     status_code = response.getcode()
                     response_headers = dict(response.headers)
@@ -351,8 +377,13 @@ class SupabaseService:
                 return 0
             finally:
                 # Never restore SUPABASE_SCHEMA or other removed variables
-                if all_removed:
-                    logger.debug("Removed SUPABASE_* variables before making request, will not be restored")
+                # Restoring them would cause encoding issues in future requests
+                if all_removed or problematic_vars:
+                    logger.debug(
+                        "Removed %d SUPABASE_* variables and %d problematic variables before making request, will not be restored",
+                        len(all_removed),
+                        len(problematic_vars)
+                    )
         except Exception as e:
             logger.error(
                 "Error when fetching containers count between dates: %s. "
