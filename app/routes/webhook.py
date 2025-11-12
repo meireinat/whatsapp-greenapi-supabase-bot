@@ -80,6 +80,10 @@ async def handle_webhook(
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Depends(get_webhook_token),
 ) -> Response:
+    logger.info("Webhook received: typeWebhook=%s, hasAuth=%s", 
+                getattr(payload, 'typeWebhook', 'unknown'),
+                authorization is not None)
+    
     if webhook_token:
         if not authorization:
             logger.warning("Missing authorization header for webhook call")
