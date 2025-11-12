@@ -101,18 +101,29 @@ class SupabaseService:
         self._schema: str | None = None  # Always None to avoid encoding issues
         self._supabase_url = supabase_url
         self._supabase_key = supabase_key
+        
         # Create httpx client for direct PostgREST API calls to avoid UnicodeEncodeError
         # This bypasses the Supabase Python client's schema handling
-        self._http_client = httpx.Client(
-            base_url=f"{supabase_url}/rest/v1",
-            headers={
-                "apikey": supabase_key,
-                "Authorization": f"Bearer {supabase_key}",
-                "Content-Type": "application/json",
-                "Prefer": "return=representation",
-            },
-            timeout=30.0,
-        )
+        # IMPORTANT: Remove SUPABASE_SCHEMA from environment before creating httpx.Client
+        # because httpx also reads environment variables and tries to encode them as ASCII
+        import os
+        original_schema_for_httpx = os.environ.pop("SUPABASE_SCHEMA", None)
+        try:
+            self._http_client = httpx.Client(
+                base_url=f"{supabase_url}/rest/v1",
+                headers={
+                    "apikey": supabase_key,
+                    "Authorization": f"Bearer {supabase_key}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation",
+                },
+                timeout=30.0,
+            )
+        finally:
+            # Never restore SUPABASE_SCHEMA to avoid encoding issues
+            # Even if it's ASCII, it can cause problems
+            if original_schema_for_httpx:
+                logger.debug("SUPABASE_SCHEMA removed before creating httpx.Client, will not be restored")
 
     def _safe_table_access(self, table_name: str):
         """
