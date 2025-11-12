@@ -75,15 +75,38 @@ class SupabaseService:
                 os.environ["SUPABASE_SCHEMA"] = original_schema
         
         self._schema: str | None = None  # Always None to avoid encoding issues
+        self._supabase_url = supabase_url
+        self._supabase_key = supabase_key
 
     def _safe_table_access(self, table_name: str):
         """
         Safely access a Supabase table by temporarily removing SUPABASE_SCHEMA
         from environment to prevent UnicodeEncodeError.
+        
+        Note: Even though we remove SUPABASE_SCHEMA from environment, the Supabase
+        client may have already cached it during initialization. We catch the error
+        and return None to indicate failure.
         """
         import os
         original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
         try:
+            return self._client.table(table_name)
+        except UnicodeEncodeError as e:
+            logger.error(
+                "UnicodeEncodeError when accessing table '%s': %s. "
+                "This is likely caused by SUPABASE_SCHEMA environment variable "
+                "containing non-ASCII characters that were cached during client initialization. "
+                "Please remove or fix SUPABASE_SCHEMA in Railway.",
+                table_name,
+                e,
+                exc_info=True,
+            )
+            # Re-create client without SUPABASE_SCHEMA in environment
+            # This is a workaround for the Supabase client caching the schema
+            logger.info("Re-creating Supabase client without SUPABASE_SCHEMA...")
+            self._client = create_client(self._supabase_url, self._supabase_key)
+            logger.info("Supabase client re-created successfully")
+            # Try again
             return self._client.table(table_name)
         finally:
             # Restore original value if it existed
