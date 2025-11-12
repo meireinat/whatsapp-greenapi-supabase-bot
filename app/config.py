@@ -48,7 +48,7 @@ def get_settings() -> Settings:
             supabase_service_role_key=_require_env(
                 "SUPABASE_SERVICE_ROLE_KEY", credentials
             ),
-            supabase_schema=os.getenv("SUPABASE_SCHEMA") or credentials.get("supabase_schema"),
+            supabase_schema=_safe_schema_env(credentials),
             bot_display_name=os.getenv("BOT_DISPLAY_NAME", "Operations Bot"),
             gemini_api_key=_optional_env("GEMINI_API_KEY", credentials),
         )
@@ -105,6 +105,29 @@ def _optional_env(name: str, credentials: dict[str, str] | None = None) -> Optio
         "GREEN_API_WEBHOOK_TOKEN": "green_api_webhook_token",
     }
     return os.getenv(name) or credentials.get(key_map.get(name, name.lower()))
+
+
+def _safe_schema_env(credentials: dict[str, str] | None = None) -> Optional[str]:
+    """
+    Load SUPABASE_SCHEMA and validate it's ASCII-only to avoid encoding errors.
+    Returns None if schema contains non-ASCII characters.
+    """
+    credentials = credentials or {}
+    schema = os.getenv("SUPABASE_SCHEMA") or credentials.get("supabase_schema")
+    if not schema:
+        return None
+    try:
+        schema.encode("ascii")
+        return schema
+    except UnicodeEncodeError:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "SUPABASE_SCHEMA contains non-ASCII characters; "
+            "schema scoping will be disabled. Value: %s",
+            schema[:50] if len(schema) > 50 else schema,
+        )
+        return None
 
 
 def _load_credentials_file() -> dict[str, str]:
