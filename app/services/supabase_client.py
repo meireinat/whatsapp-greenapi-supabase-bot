@@ -461,12 +461,17 @@ class SupabaseService:
                             role = payload_json.get('role', 'unknown')
                             logger.info("JWT role in apikey: %s", role)
                             if role == 'anon':
-                                logger.warning(
-                                    "Using ANON key - this may have limited permissions. "
-                                    "Consider using SERVICE_ROLE key from Supabase Dashboard."
+                                logger.error(
+                                    "CRITICAL: Using ANON key instead of SERVICE_ROLE key! "
+                                    "This will cause 401 errors if RLS is enabled. "
+                                    "Please update SUPABASE_SERVICE_ROLE_KEY in Railway with the service_role key from Supabase Dashboard."
                                 )
-                    except Exception:
-                        pass  # Don't fail if JWT decode fails
+                            elif role == 'service_role':
+                                logger.info("Using SERVICE_ROLE key - this should work correctly")
+                            else:
+                                logger.warning("Unknown JWT role: %s", role)
+                    except Exception as e:
+                        logger.warning("Failed to decode JWT payload: %s", e, exc_info=True)
                 
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
