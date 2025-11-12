@@ -46,29 +46,38 @@ class SupabaseService:
         Count containers unloaded on a specific date.
         """
         logger.debug("Fetching container count for %s", target_date.isoformat())
-        query = self._client.table("containers")
-        if self._schema:
-            query = query.schema(self._schema)
-        response = (
-            query.select("SHANA", count="exact")
-            .gte("TARICH_PRIKA", target_date.isoformat())
-            .lte("TARICH_PRIKA", target_date.isoformat())
-            .execute()
-        )
+        try:
+            query = self._client.table("containers")
+            if self._schema:
+                query = query.schema(self._schema)
+            response = (
+                query.select("SHANA", count="exact")
+                .gte("TARICH_PRIKA", target_date.isoformat())
+                .lte("TARICH_PRIKA", target_date.isoformat())
+                .execute()
+            )
 
-        count = getattr(response, "count", None)
-        if count is not None:
-            logger.info("Container count for %s is %s", target_date.isoformat(), count)
-            return int(count)
+            count = getattr(response, "count", None)
+            if count is not None:
+                logger.info("Container count for %s is %s", target_date.isoformat(), count)
+                return int(count)
 
-        items: list[dict[str, Any]] = getattr(response, "data", [])
-        total = len(items)
-        logger.info(
-            "Container count for %s derived from row count=%s",
-            target_date.isoformat(),
-            total,
-        )
-        return int(total)
+            items: list[dict[str, Any]] = getattr(response, "data", [])
+            total = len(items)
+            logger.info(
+                "Container count for %s derived from row count=%s",
+                target_date.isoformat(),
+                total,
+            )
+            return int(total)
+        except UnicodeEncodeError as e:
+            logger.error(
+                "UnicodeEncodeError when fetching daily containers count: %s. "
+                "This may be caused by non-ASCII characters in Supabase configuration. "
+                "Returning 0.",
+                e,
+            )
+            return 0
 
     def get_containers_count_between(
         self, start_date: dt.date, end_date: dt.date
@@ -81,19 +90,28 @@ class SupabaseService:
             start_date.isoformat(),
             end_date.isoformat(),
         )
-        query = self._client.table("containers")
-        if self._schema:
-            query = query.schema(self._schema)
-        response = query.select("SHANA", count="exact").gte(
-            "TARICH_PRIKA", start_date.isoformat()
-        ).lte("TARICH_PRIKA", end_date.isoformat()).execute()
+        try:
+            query = self._client.table("containers")
+            if self._schema:
+                query = query.schema(self._schema)
+            response = query.select("SHANA", count="exact").gte(
+                "TARICH_PRIKA", start_date.isoformat()
+            ).lte("TARICH_PRIKA", end_date.isoformat()).execute()
 
-        count = getattr(response, "count", None)
-        if count is not None:
-            return int(count)
+            count = getattr(response, "count", None)
+            if count is not None:
+                return int(count)
 
-        items: list[dict[str, Any]] = getattr(response, "data", [])
-        return int(len(items))
+            items: list[dict[str, Any]] = getattr(response, "data", [])
+            return int(len(items))
+        except UnicodeEncodeError as e:
+            logger.error(
+                "UnicodeEncodeError when fetching containers count between dates: %s. "
+                "This may be caused by non-ASCII characters in Supabase configuration. "
+                "Returning 0.",
+                e,
+            )
+            return 0
 
     def get_vehicle_count_between(
         self, start_date: dt.date, end_date: dt.date
@@ -106,16 +124,25 @@ class SupabaseService:
             start_date.isoformat(),
             end_date.isoformat(),
         )
-        query = self._client.table("ramp_operations")
-        if self._schema:
-            query = query.schema(self._schema)
-        response = query.select("vehicles_count, operation_date").gte(
-            "operation_date", start_date.isoformat()
-        ).lte("operation_date", end_date.isoformat()).execute()
+        try:
+            query = self._client.table("ramp_operations")
+            if self._schema:
+                query = query.schema(self._schema)
+            response = query.select("vehicles_count, operation_date").gte(
+                "operation_date", start_date.isoformat()
+            ).lte("operation_date", end_date.isoformat()).execute()
 
-        items: list[dict[str, Any]] = getattr(response, "data", [])
-        total = sum(int(item.get("vehicles_count") or 0) for item in items)
-        return total
+            items: list[dict[str, Any]] = getattr(response, "data", [])
+            total = sum(int(item.get("vehicles_count") or 0) for item in items)
+            return total
+        except UnicodeEncodeError as e:
+            logger.error(
+                "UnicodeEncodeError when fetching vehicle count between dates: %s. "
+                "This may be caused by non-ASCII characters in Supabase configuration. "
+                "Returning 0.",
+                e,
+            )
+            return 0
 
     def get_metrics_summary(
         self,
@@ -183,36 +210,54 @@ class SupabaseService:
     def _fetch_containers(
         self, start_date: dt.date, end_date: dt.date, limit: int
     ) -> list[dict[str, Any]]:
-        query = self._client.table("containers")
-        if self._schema:
-            query = query.schema(self._schema)
-        response = (
-            query.select(
-                "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
+        try:
+            query = self._client.table("containers")
+            if self._schema:
+                query = query.schema(self._schema)
+            response = (
+                query.select(
+                    "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
+                )
+                .gte("TARICH_PRIKA", start_date.isoformat())
+                .lte("TARICH_PRIKA", end_date.isoformat())
+                .order("TARICH_PRIKA", desc=False)
+                .limit(limit)
+                .execute()
             )
-            .gte("TARICH_PRIKA", start_date.isoformat())
-            .lte("TARICH_PRIKA", end_date.isoformat())
-            .order("TARICH_PRIKA", desc=False)
-            .limit(limit)
-            .execute()
-        )
-        return list(getattr(response, "data", []))
+            return list(getattr(response, "data", []))
+        except UnicodeEncodeError as e:
+            logger.error(
+                "UnicodeEncodeError when fetching containers: %s. "
+                "This may be caused by non-ASCII characters in Supabase configuration. "
+                "Returning empty result.",
+                e,
+            )
+            return []
 
     def _fetch_vehicles(
         self, start_date: dt.date, end_date: dt.date, limit: int
     ) -> list[dict[str, Any]]:
-        query = self._client.table("ramp_operations")
-        if self._schema:
-            query = query.schema(self._schema)
-        response = (
-            query.select("vehicles_count,containers_count,operation_date,ramp_id,shift")
-            .gte("operation_date", start_date.isoformat())
-            .lte("operation_date", end_date.isoformat())
-            .order("operation_date", desc=False)
-            .limit(limit)
-            .execute()
-        )
-        return list(getattr(response, "data", []))
+        try:
+            query = self._client.table("ramp_operations")
+            if self._schema:
+                query = query.schema(self._schema)
+            response = (
+                query.select("vehicles_count,containers_count,operation_date,ramp_id,shift")
+                .gte("operation_date", start_date.isoformat())
+                .lte("operation_date", end_date.isoformat())
+                .order("operation_date", desc=False)
+                .limit(limit)
+                .execute()
+            )
+            return list(getattr(response, "data", []))
+        except UnicodeEncodeError as e:
+            logger.error(
+                "UnicodeEncodeError when fetching vehicles: %s. "
+                "This may be caused by non-ASCII characters in Supabase configuration. "
+                "Returning empty result.",
+                e,
+            )
+            return []
 
     def log_query(
         self,
