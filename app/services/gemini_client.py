@@ -40,17 +40,23 @@ class GeminiService:
         """
 
         def _call() -> str:
-            config = types.GenerateContentConfig(
-                system_instruction=system_instruction
+            # Build config with thinking_config only if thinking_budget > 0
+            config_kwargs: dict[str, Any] = {
+                "system_instruction": system_instruction
                 or (
                     "You are a data analyst for a port operations team. "
                     "Answer in Hebrew, using only the data provided in the JSON context. "
                     "If the context lacks information required to answer accurately, "
                     "state clearly what is missing instead of guessing."
                 ),
-                thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget),
-                temperature=0.3,
-            )
+                "temperature": 0.3,
+            }
+            # Only add thinking_config if thinking_budget is explicitly set and > 0
+            if thinking_budget > 0:
+                config_kwargs["thinking_config"] = types.ThinkingConfig(
+                    thinking_budget=thinking_budget
+                )
+            config = types.GenerateContentConfig(**config_kwargs)
             prompt = self._build_prompt(question=question, metrics=metrics)
             response = self._client.models.generate_content(
                 model=self._model,
