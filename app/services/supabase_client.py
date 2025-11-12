@@ -9,8 +9,10 @@ import logging
 from typing import Any, Iterable, List, Mapping
 
 import json
+import ssl
 import urllib.request
 import urllib.parse
+import httpx
 from supabase import Client, create_client
 
 logger = logging.getLogger(__name__)
@@ -257,14 +259,12 @@ class SupabaseService:
             url = f"/containers?{query_params}"
             logger.info("PostgREST URL: %s", url)
             
-            # Make request using urllib.request directly to avoid encoding issues
-            # with environment variables containing non-ASCII characters
-            # IMPORTANT: Remove SUPABASE_SCHEMA from environment BEFORE creating Request
-            # because urllib.request/http.client reads it during Request initialization
+            # Use httpx with explicit headers to avoid encoding issues
+            # httpx doesn't read environment variables like urllib.request/http.client does
             import os
             # Remove ALL SUPABASE_* variables except URL and KEY to be safe
             # This ensures no environment variable with non-ASCII characters
-            # is read by any library (urllib.request, http.client, etc.)
+            # is read by any library
             all_removed = {}
             for key in list(os.environ.keys()):
                 if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
@@ -312,12 +312,14 @@ class SupabaseService:
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
                 
-                # Use urllib.request directly to avoid encoding issues
-                req = urllib.request.Request(full_url, headers=safe_headers)
-                with urllib.request.urlopen(req, timeout=self._http_timeout) as response:
-                    status_code = response.getcode()
+                # Use httpx with explicit headers to avoid encoding issues
+                # httpx doesn't read environment variables during client creation
+                with httpx.Client(timeout=self._http_timeout, verify=True) as client:
+                    response = client.get(full_url, headers=safe_headers)
+                    
+                    status_code = response.status_code
                     response_headers = dict(response.headers)
-                    response_data = response.read()
+                    response_data = response.content
                     
                     logger.info("Response status: %s", status_code)
                     logger.info("Response headers: %s", response_headers)
@@ -342,7 +344,7 @@ class SupabaseService:
                     
                     # Fallback to counting items in response
                     try:
-                        data = json.loads(response_data.decode('utf-8'))
+                        data = response.json()
                         logger.info("Response data type: %s, length: %s", type(data), len(data) if isinstance(data, list) else "N/A")
                         if isinstance(data, list):
                             count = len(data)
