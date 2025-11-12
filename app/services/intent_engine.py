@@ -51,11 +51,11 @@ class IntentEngine:
 
     MONTHLY_CONTAINER_PATTERNS = (
         re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s+(?P<month_name>\w+)\s+(?P<year>\d{2,4})",
+            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s*(?P<month_name>\w+)\s+(?P<year>\d{2,4})",
             re.IGNORECASE,
         ),
         re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s+(?P<month_name>\w+)",
+            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s*(?P<month_name>\w+)",
             re.IGNORECASE,
         ),
     )
