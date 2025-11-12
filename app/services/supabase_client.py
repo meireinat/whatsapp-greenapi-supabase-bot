@@ -45,31 +45,29 @@ class SupabaseService:
                 )
         # Create client without schema to avoid encoding issues
         # Always use default schema (usually 'public')
-        # Remove SUPABASE_SCHEMA and any other SUPABASE_* variables with non-ASCII
-        # characters from environment to prevent Supabase client from reading them
-        # and causing UnicodeEncodeError
+        # Remove SUPABASE_SCHEMA from environment to prevent Supabase client
+        # from reading it and causing UnicodeEncodeError
+        # NOTE: Only remove SUPABASE_SCHEMA, not other SUPABASE_* variables
+        # like SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY which are critical
         import os
         
-        # Remove SUPABASE_SCHEMA and any other problematic SUPABASE_* variables
+        # Remove SUPABASE_SCHEMA from environment before creating client
+        # NOTE: Only remove SUPABASE_SCHEMA, not other SUPABASE_* variables
+        # like SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY which are critical
         removed_vars = {}
-        for key in list(os.environ.keys()):
-            if key.startswith("SUPABASE_") and key != "SUPABASE_URL" and key != "SUPABASE_SERVICE_ROLE_KEY":
-                value = os.environ.pop(key, None)
-                if value:
-                    try:
-                        value.encode("ascii")
-                        # Even if ASCII, don't restore it to avoid issues
-                        removed_vars[key] = value
-                        logger.info(
-                            "Removed %s from environment to avoid encoding issues (will not be restored)",
-                            key
-                        )
-                    except UnicodeEncodeError:
-                        removed_vars[key] = value
-                        logger.warning(
-                            "Removed %s from environment (contains non-ASCII characters, will not be restored)",
-                            key
-                        )
+        if "SUPABASE_SCHEMA" in os.environ:
+            value = os.environ.pop("SUPABASE_SCHEMA", None)
+            if value:
+                removed_vars["SUPABASE_SCHEMA"] = value
+                try:
+                    value.encode("ascii")
+                    logger.info(
+                        "Removed SUPABASE_SCHEMA from environment to avoid encoding issues (will not be restored)"
+                    )
+                except UnicodeEncodeError:
+                    logger.warning(
+                        "Removed SUPABASE_SCHEMA from environment (contains non-ASCII characters, will not be restored)"
+                    )
         
         logger.info("Creating Supabase client (schema will not be used)")
         try:
@@ -83,10 +81,9 @@ class SupabaseService:
                 e,
                 exc_info=True,
             )
-            # Make sure all problematic variables are still removed
-            for key in list(os.environ.keys()):
-                if key.startswith("SUPABASE_") and key != "SUPABASE_URL" and key != "SUPABASE_SERVICE_ROLE_KEY":
-                    os.environ.pop(key, None)
+            # Make sure SUPABASE_SCHEMA is still removed
+            if "SUPABASE_SCHEMA" in os.environ:
+                os.environ.pop("SUPABASE_SCHEMA", None)
             # Try to create client again
             self._client: Client = create_client(supabase_url, supabase_key)
             logger.info("Supabase client created successfully after removing problematic variables")
@@ -96,9 +93,8 @@ class SupabaseService:
             # The Supabase client reads them during initialization and caches them
             if removed_vars:
                 logger.info(
-                    "Removed %d SUPABASE_* environment variable(s) to avoid encoding issues. "
-                    "These will not be restored. Please remove them from Railway environment variables.",
-                    len(removed_vars)
+                    "Removed SUPABASE_SCHEMA from environment to avoid encoding issues. "
+                    "It will not be restored. Please remove SUPABASE_SCHEMA from Railway environment variables."
                 )
         
         self._schema: str | None = None  # Always None to avoid encoding issues
@@ -119,22 +115,13 @@ class SupabaseService:
         # Remove SUPABASE_SCHEMA from environment before any operation
         # This must be done before accessing the client, as the client
         # may read it during initialization
+        # NOTE: Only remove SUPABASE_SCHEMA, not other SUPABASE_* variables
+        # like SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY which are critical
         original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
-        
-        # Also check for any other environment variables that might contain
-        # non-ASCII characters that could interfere with Supabase client
-        # We'll filter them out temporarily
         problematic_vars = {}
-        for key, value in list(os.environ.items()):
-            if key.startswith("SUPABASE_") and value:
-                try:
-                    value.encode("ascii")
-                except UnicodeEncodeError:
-                    problematic_vars[key] = os.environ.pop(key)
-                    logger.warning(
-                        "Temporarily removed %s from environment (contains non-ASCII characters)",
-                        key
-                    )
+        if original_schema:
+            problematic_vars["SUPABASE_SCHEMA"] = original_schema
+            logger.debug("Removed SUPABASE_SCHEMA from environment")
         
         try:
             return self._client.table(table_name)
@@ -150,15 +137,9 @@ class SupabaseService:
             )
             # Re-create client without SUPABASE_SCHEMA in environment
             # Make sure SUPABASE_SCHEMA is still removed before creating new client
+            # NOTE: Only remove SUPABASE_SCHEMA, not other SUPABASE_* variables
             if "SUPABASE_SCHEMA" in os.environ:
-                os.environ.pop("SUPABASE_SCHEMA", None)
-            
-            # Remove any other problematic SUPABASE_* variables
-            for key in list(os.environ.keys()):
-                if key.startswith("SUPABASE_") and key != "SUPABASE_URL" and key != "SUPABASE_SERVICE_ROLE_KEY":
-                    value = os.environ.pop(key, None)
-                    if value:
-                        problematic_vars[key] = value
+                problematic_vars["SUPABASE_SCHEMA"] = os.environ.pop("SUPABASE_SCHEMA", None)
             
             # Create a completely fresh client
             self._client = create_client(self._supabase_url, self._supabase_key)
