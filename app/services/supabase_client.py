@@ -250,10 +250,11 @@ class SupabaseService:
                 ("select", "SHANA"),
                 ("TARICH_PRIKA", f"gte.{start_str}"),
                 ("TARICH_PRIKA", f"lte.{end_str}"),
-            ])
+            ], doseq=True)
             url = f"/containers?{query_params}"
-            logger.debug("PostgREST URL: %s", url)
+            logger.info("PostgREST URL: %s", url)
             
+            # Make request with proper headers for count
             response = self._http_client.get(
                 url,
                 headers={
@@ -262,13 +263,13 @@ class SupabaseService:
                     "Prefer": "count=exact",
                 },
             )
-            logger.debug("Response status: %s", response.status_code)
-            logger.debug("Response headers: %s", dict(response.headers))
+            logger.info("Response status: %s", response.status_code)
+            logger.info("Response headers: %s", dict(response.headers))
             response.raise_for_status()
             
             # Get count from Content-Range header if available
             content_range = response.headers.get("Content-Range", "")
-            logger.debug("Content-Range header: %s", content_range)
+            logger.info("Content-Range header: %s", content_range)
             if content_range:
                 # Format: "0-9/100" where 100 is the total count
                 parts = content_range.split("/")
@@ -279,10 +280,16 @@ class SupabaseService:
             
             # Fallback to counting items in response
             data = response.json()
-            logger.debug("Response data type: %s, length: %s", type(data), len(data) if isinstance(data, list) else "N/A")
-            count = len(data) if isinstance(data, list) else 0
-            logger.info("Query response count from data length: %s", count)
-            return count
+            logger.info("Response data type: %s, length: %s", type(data), len(data) if isinstance(data, list) else "N/A")
+            if isinstance(data, list):
+                count = len(data)
+                logger.info("Query response count from data length: %s", count)
+                # If we got a limited result set, the count might be in Content-Range
+                # But if Content-Range wasn't available, we return the length
+                return count
+            else:
+                logger.warning("Response data is not a list: %s", type(data))
+                return 0
         except httpx.HTTPStatusError as e:
             logger.error(
                 "HTTP error when fetching containers count: %s - %s. "
