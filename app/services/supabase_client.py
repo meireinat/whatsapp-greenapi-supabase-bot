@@ -45,6 +45,16 @@ class SupabaseService:
                 )
         # Create client without schema to avoid encoding issues
         # Always use default schema (usually 'public')
+        # Remove SUPABASE_SCHEMA from environment to prevent Supabase client
+        # from reading it and causing UnicodeEncodeError
+        import os
+        original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
+        if original_schema:
+            logger.info(
+                "Removed SUPABASE_SCHEMA from environment to avoid encoding issues. "
+                "Original value contained non-ASCII characters."
+            )
+        
         logger.info("Creating Supabase client (schema will not be used)")
         try:
             self._client: Client = create_client(supabase_url, supabase_key)
@@ -59,6 +69,11 @@ class SupabaseService:
             )
             # Try to create client again - maybe the error was transient
             self._client: Client = create_client(supabase_url, supabase_key)
+        finally:
+            # Restore original value if it existed (though we won't use it)
+            if original_schema:
+                os.environ["SUPABASE_SCHEMA"] = original_schema
+        
         self._schema: str | None = None  # Always None to avoid encoding issues
 
     def get_daily_containers_count(self, target_date: dt.date) -> int:
