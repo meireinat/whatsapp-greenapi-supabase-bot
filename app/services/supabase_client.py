@@ -25,19 +25,21 @@ class SupabaseService:
         supabase_key: str,
         schema: str | None = None,
     ) -> None:
-        self._client: Client = create_client(supabase_url, supabase_key)
-        self._schema: str | None = None
+        # Filter out non-ASCII schema values before creating client
+        safe_schema: str | None = None
         if schema:
             try:
                 schema.encode("ascii")
+                safe_schema = schema
             except UnicodeEncodeError:
                 logger.warning(
                     "Supabase schema '%s' contains non-ASCII characters; "
                     "schema scoping will be disabled to avoid encoding issues.",
                     schema,
                 )
-            else:
-                self._schema = schema
+        # Create client without schema to avoid encoding issues
+        self._client: Client = create_client(supabase_url, supabase_key)
+        self._schema: str | None = safe_schema
 
     def get_daily_containers_count(self, target_date: dt.date) -> int:
         """
@@ -184,24 +186,16 @@ class SupabaseService:
         query = self._client.table("containers")
         if self._schema:
             query = query.schema(self._schema)
-        try:
-            response = (
-                query.select(
-                    "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
-                )
-                .gte("TARICH_PRIKA", start_date.isoformat())
-                .lte("TARICH_PRIKA", end_date.isoformat())
-                .order("TARICH_PRIKA", desc=False)
-                .limit(limit)
-                .execute()
+        response = (
+            query.select(
+                "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
             )
-        except UnicodeEncodeError:
-            logger.error(
-                "Supabase query for containers failed due to Unicode header encoding. "
-                "Verify schema/table names are ASCII. Returning empty result."
-            )
-            return []
-
+            .gte("TARICH_PRIKA", start_date.isoformat())
+            .lte("TARICH_PRIKA", end_date.isoformat())
+            .order("TARICH_PRIKA", desc=False)
+            .limit(limit)
+            .execute()
+        )
         return list(getattr(response, "data", []))
 
     def _fetch_vehicles(
@@ -210,24 +204,14 @@ class SupabaseService:
         query = self._client.table("ramp_operations")
         if self._schema:
             query = query.schema(self._schema)
-        try:
-            response = (
-                query.select(
-                    "vehicles_count,containers_count,operation_date,ramp_id,shift"
-                )
-                .gte("operation_date", start_date.isoformat())
-                .lte("operation_date", end_date.isoformat())
-                .order("operation_date", desc=False)
-                .limit(limit)
-                .execute()
-            )
-        except UnicodeEncodeError:
-            logger.error(
-                "Supabase query for vehicles failed due to Unicode header encoding. "
-                "Verify schema/table names are ASCII. Returning empty result."
-            )
-            return []
-
+        response = (
+            query.select("vehicles_count,containers_count,operation_date,ramp_id,shift")
+            .gte("operation_date", start_date.isoformat())
+            .lte("operation_date", end_date.isoformat())
+            .order("operation_date", desc=False)
+            .limit(limit)
+            .execute()
+        )
         return list(getattr(response, "data", []))
 
     def log_query(
