@@ -112,17 +112,19 @@ class SupabaseService:
         self._http_base_url = f"{supabase_url}/rest/v1"
         
         # Verify that supabase_key is ASCII before creating headers
+        # Log for debugging but don't fail if there's an issue
         try:
             supabase_key.encode('ascii')
             logger.debug("supabase_key is ASCII (length: %d)", len(supabase_key))
         except UnicodeEncodeError as e:
             logger.error(
-                "CRITICAL: supabase_key contains non-ASCII characters! "
-                "Length: %d, First 50 chars: %s, Error: %s",
+                "WARNING: supabase_key contains non-ASCII characters! "
+                "Length: %d, First 50 chars: %s, Error: %s. "
+                "This may cause issues with HTTP headers.",
                 len(supabase_key), supabase_key[:50] if len(supabase_key) > 50 else supabase_key, e
             )
-            # This should never happen, but if it does, we need to handle it
-            raise ValueError("supabase_key must be ASCII") from e
+            # Don't raise - just log the warning
+            # The headers will be checked later in get_containers_count_between
         
         self._http_headers = {
             "apikey": supabase_key,
