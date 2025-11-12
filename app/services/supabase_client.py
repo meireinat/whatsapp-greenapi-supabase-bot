@@ -26,11 +26,18 @@ class SupabaseService:
         schema: str | None = None,
     ) -> None:
         self._client: Client = create_client(supabase_url, supabase_key)
+        self._schema: str | None = None
         if schema:
-            # `postgrest.schema` setter expects ASCII-only headers; avoid direct assignment.
-            self._schema = schema
-        else:
-            self._schema = None
+            try:
+                schema.encode("ascii")
+            except UnicodeEncodeError:
+                logger.warning(
+                    "Supabase schema '%s' contains non-ASCII characters; "
+                    "schema scoping will be disabled to avoid encoding issues.",
+                    schema,
+                )
+            else:
+                self._schema = schema
 
     def get_daily_containers_count(self, target_date: dt.date) -> int:
         """
