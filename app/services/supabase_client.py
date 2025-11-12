@@ -265,6 +265,17 @@ class SupabaseService:
                 os.environ.pop("SUPABASE_SCHEMA", None)
             
             try:
+                # Remove ALL SUPABASE_* variables except URL and KEY to be safe
+                # This ensures no environment variable with non-ASCII characters
+                # is read by requests/urllib3
+                all_removed = {}
+                for key in list(os.environ.keys()):
+                    if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+                        removed = os.environ.pop(key, None)
+                        if removed:
+                            all_removed[key] = removed
+                            logger.debug("Removed %s from environment before request", key)
+                
                 request_headers = {
                     **self._http_headers,
                     "Range-Unit": "items",
@@ -272,15 +283,25 @@ class SupabaseService:
                 }
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
+                logger.debug("Request headers (without sensitive data): %s", {k: v[:20] + "..." if len(v) > 20 else v for k, v in request_headers.items() if k != "Authorization"})
                 response = requests.get(
                     full_url,
                     headers=request_headers,
                     timeout=self._http_timeout,
                 )
+            except UnicodeEncodeError as e:
+                logger.error(
+                    "UnicodeEncodeError when making request: %s. "
+                    "This suggests SUPABASE_SCHEMA or another environment variable "
+                    "contains non-ASCII characters. Returning 0.",
+                    e,
+                    exc_info=True,
+                )
+                return 0
             finally:
-                # Never restore SUPABASE_SCHEMA to avoid encoding issues
-                if original_schema:
-                    logger.debug("SUPABASE_SCHEMA removed before making request, will not be restored")
+                # Never restore SUPABASE_SCHEMA or other removed variables
+                if original_schema or all_removed:
+                    logger.debug("Removed SUPABASE_* variables before making request, will not be restored")
             logger.info("Response status: %s", response.status_code)
             logger.info("Response headers: %s", dict(response.headers))
             response.raise_for_status()
