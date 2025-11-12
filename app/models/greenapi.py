@@ -39,12 +39,13 @@ class GreenWebhookPayload(BaseModel):
     Root payload for webhook notifications from Green API.
 
     The API exposes a broad schema; we extract the fields required for the bot flow.
+    Note: messageData and senderData are only present for incomingMessageReceived webhooks.
     """
 
     model_config = ConfigDict(extra="allow")
 
     typeWebhook: str
     timestamp: int | None = None
-    messageData: MessageData
-    senderData: SenderData
+    messageData: MessageData | None = None
+    senderData: SenderData | None = None
 

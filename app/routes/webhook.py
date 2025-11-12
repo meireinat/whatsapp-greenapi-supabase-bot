@@ -94,6 +94,16 @@ async def handle_webhook(
             logger.warning("Invalid webhook token provided")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
+    # Only process incomingMessageReceived webhooks
+    if payload.typeWebhook != "incomingMessageReceived":
+        logger.info("Ignoring webhook type: %s", payload.typeWebhook)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # Validate that we have the required fields for incoming messages
+    if not payload.messageData or not payload.senderData:
+        logger.warning("Missing messageData or senderData in incomingMessageReceived webhook")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     if payload.messageData.typeMessage.lower() != "textmessage":
         logger.info("Ignoring non-text message (type=%s)", payload.messageData.typeMessage)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
