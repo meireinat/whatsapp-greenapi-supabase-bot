@@ -106,8 +106,13 @@ class SupabaseService:
         # This bypasses the Supabase Python client's schema handling
         # IMPORTANT: Remove SUPABASE_SCHEMA from environment before creating httpx.Client
         # because httpx also reads environment variables and tries to encode them as ASCII
+        # We need to ensure SUPABASE_SCHEMA is removed before creating the client
         import os
+        # Make absolutely sure SUPABASE_SCHEMA is removed
         original_schema_for_httpx = os.environ.pop("SUPABASE_SCHEMA", None)
+        if "SUPABASE_SCHEMA" in os.environ:
+            os.environ.pop("SUPABASE_SCHEMA", None)
+        
         try:
             self._http_client = httpx.Client(
                 base_url=f"{supabase_url}/rest/v1",
@@ -119,6 +124,33 @@ class SupabaseService:
                 },
                 timeout=30.0,
             )
+            logger.info("httpx.Client created successfully")
+        except UnicodeEncodeError as e:
+            logger.error(
+                "UnicodeEncodeError when creating httpx.Client: %s. "
+                "This may be caused by SUPABASE_SCHEMA or other environment variables "
+                "containing non-ASCII characters. Trying again after removing all SUPABASE_* vars...",
+                e,
+                exc_info=True,
+            )
+            # Remove all SUPABASE_* variables except URL and KEY
+            for key in list(os.environ.keys()):
+                if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+                    removed = os.environ.pop(key, None)
+                    if removed:
+                        logger.warning("Removed %s from environment: %s", key, removed[:50] if len(removed) > 50 else removed)
+            # Try again
+            self._http_client = httpx.Client(
+                base_url=f"{supabase_url}/rest/v1",
+                headers={
+                    "apikey": supabase_key,
+                    "Authorization": f"Bearer {supabase_key}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation",
+                },
+                timeout=30.0,
+            )
+            logger.info("httpx.Client created successfully after removing problematic environment variables")
         finally:
             # Never restore SUPABASE_SCHEMA to avoid encoding issues
             # Even if it's ASCII, it can cause problems
