@@ -339,6 +339,14 @@ class SupabaseService:
                 if 'apikey' not in safe_headers or 'Authorization' not in safe_headers:
                     logger.error("CRITICAL: Missing required headers! apikey: %s, Authorization: %s", 
                                'apikey' in safe_headers, 'Authorization' in safe_headers)
+                    # Try to add them anyway with the cleaned key
+                    if 'apikey' not in safe_headers:
+                        logger.warning("Adding apikey header with cleaned key")
+                        safe_headers['apikey'] = self._supabase_key
+                    if 'Authorization' not in safe_headers:
+                        logger.warning("Adding Authorization header with cleaned key")
+                        safe_headers['Authorization'] = f"Bearer {self._supabase_key}"
+                    logger.info("Headers after fix: %s", list(safe_headers.keys()))
                 
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
