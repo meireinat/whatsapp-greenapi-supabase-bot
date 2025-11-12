@@ -104,39 +104,30 @@ class SupabaseService:
         
         self._schema: str | None = None  # Always None to avoid encoding issues
         self._supabase_url = supabase_url
-        self._supabase_key = supabase_key
+        
+        # Clean supabase_key if it contains non-ASCII characters
+        # Store the cleaned key for use in headers
+        try:
+            supabase_key.encode('ascii')
+            self._supabase_key = supabase_key
+        except UnicodeEncodeError:
+            # Remove non-ASCII characters
+            self._supabase_key = ''.join(c for c in supabase_key if ord(c) < 128)
+            logger.warning("Cleaned supabase_key: removed %d non-ASCII characters", len(supabase_key) - len(self._supabase_key))
         
         # Store parameters for direct HTTP requests using httpx
         # We use httpx to avoid UnicodeEncodeError issues
         # with environment variables containing non-ASCII characters
         self._http_base_url = f"{supabase_url}/rest/v1"
         
-        # Verify that supabase_key is ASCII before creating headers
-        # If it contains non-ASCII characters, try to clean it
-        try:
-            supabase_key.encode('ascii')
-            logger.debug("supabase_key is ASCII (length: %d)", len(supabase_key))
-            clean_key = supabase_key
-        except UnicodeEncodeError as e:
-            logger.error(
-                "WARNING: supabase_key contains non-ASCII characters! "
-                "Length: %d, First 50 chars: %s, Error: %s. "
-                "Attempting to clean the key...",
-                len(supabase_key), supabase_key[:50] if len(supabase_key) > 50 else supabase_key, e
-            )
-            # Try to remove non-ASCII characters
-            # JWT tokens should only contain ASCII characters
-            clean_key = ''.join(c for c in supabase_key if ord(c) < 128)
-            logger.info("Cleaned supabase_key: length %d -> %d", len(supabase_key), len(clean_key))
-            if len(clean_key) != len(supabase_key):
-                logger.warning("Removed %d non-ASCII characters from supabase_key", len(supabase_key) - len(clean_key))
-        
+        # Use the cleaned key for headers (already cleaned above)
         self._http_headers = {
-            "apikey": clean_key,
-            "Authorization": f"Bearer {clean_key}",
+            "apikey": self._supabase_key,
+            "Authorization": f"Bearer {self._supabase_key}",
             "Content-Type": "application/json",
             "Prefer": "return=representation",
         }
+        logger.debug("Created HTTP headers with cleaned supabase_key (length: %d)", len(self._supabase_key))
         self._http_timeout = 30.0
 
     def _safe_table_access(self, table_name: str):
@@ -179,7 +170,7 @@ class SupabaseService:
             if "SUPABASE_SCHEMA" in os.environ:
                 problematic_vars["SUPABASE_SCHEMA"] = os.environ.pop("SUPABASE_SCHEMA", None)
             
-            # Create a completely fresh client
+            # Create a completely fresh client with the cleaned key
             self._client = create_client(self._supabase_url, self._supabase_key)
             logger.info("Supabase client re-created successfully without SUPABASE_SCHEMA")
             # Try again - should work now
