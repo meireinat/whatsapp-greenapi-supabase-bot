@@ -251,18 +251,24 @@ class SupabaseService:
                 ("TARICH_PRIKA", f"gte.{start_str}"),
                 ("TARICH_PRIKA", f"lte.{end_str}"),
             ])
+            url = f"/containers?{query_params}"
+            logger.debug("PostgREST URL: %s", url)
+            
             response = self._http_client.get(
-                f"/containers?{query_params}",
+                url,
                 headers={
                     **self._http_client.headers,
                     "Range-Unit": "items",
                     "Prefer": "count=exact",
                 },
             )
+            logger.debug("Response status: %s", response.status_code)
+            logger.debug("Response headers: %s", dict(response.headers))
             response.raise_for_status()
             
             # Get count from Content-Range header if available
             content_range = response.headers.get("Content-Range", "")
+            logger.debug("Content-Range header: %s", content_range)
             if content_range:
                 # Format: "0-9/100" where 100 is the total count
                 parts = content_range.split("/")
@@ -273,9 +279,20 @@ class SupabaseService:
             
             # Fallback to counting items in response
             data = response.json()
+            logger.debug("Response data type: %s, length: %s", type(data), len(data) if isinstance(data, list) else "N/A")
             count = len(data) if isinstance(data, list) else 0
             logger.info("Query response count from data length: %s", count)
             return count
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "HTTP error when fetching containers count: %s - %s. "
+                "Response: %s. Returning 0.",
+                e.response.status_code,
+                e.response.reason_phrase,
+                e.response.text[:500] if e.response.text else "No response body",
+                exc_info=True,
+            )
+            return 0
         except Exception as e:
             logger.error(
                 "Error when fetching containers count between dates: %s. "
