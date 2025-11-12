@@ -430,6 +430,23 @@ class SupabaseService:
                         apikey_value[:50],
                         apikey_value[-50:] if len(apikey_value) > 50 else apikey_value
                     )
+                    # Check if the key contains any non-ASCII characters
+                    try:
+                        apikey_value.encode('ascii')
+                        logger.debug("apikey is ASCII (length: %d)", len(apikey_value))
+                    except UnicodeEncodeError as e:
+                        logger.error(
+                            "CRITICAL: apikey still contains non-ASCII characters after fixing! "
+                            "This will cause authentication to fail. Error: %s",
+                            e
+                        )
+                        # Find all non-ASCII characters
+                        non_ascii_chars = [c for c in apikey_value if ord(c) > 127]
+                        logger.error(
+                            "Non-ASCII characters found in apikey: %s (positions: %s)",
+                            non_ascii_chars,
+                            [i for i, c in enumerate(apikey_value) if ord(c) > 127]
+                        )
                 
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
