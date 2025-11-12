@@ -314,8 +314,10 @@ class SupabaseService:
                 parts = content_range.split("/")
                 if len(parts) == 2 and parts[1].isdigit():
                     count = int(parts[1])
-                    logger.info("Query response count from header: %s", count)
+                    logger.info("Query response count from Content-Range header: %s", count)
                     return count
+                else:
+                    logger.warning("Content-Range header format unexpected: %s", content_range)
             
             # Fallback to counting items in response
             data = response.json()
@@ -325,9 +327,17 @@ class SupabaseService:
                 logger.info("Query response count from data length: %s", count)
                 # If we got a limited result set, the count might be in Content-Range
                 # But if Content-Range wasn't available, we return the length
+                # NOTE: This might not be accurate if PostgREST limits results
+                if count > 0:
+                    logger.warning(
+                        "Got %d items in response but no Content-Range header. "
+                        "This might be a partial result. Consider using count=exact header.",
+                        count
+                    )
                 return count
             else:
                 logger.warning("Response data is not a list: %s", type(data))
+                logger.warning("Response data content: %s", str(data)[:500])
                 return 0
         except requests.exceptions.HTTPError as e:
             logger.error(
