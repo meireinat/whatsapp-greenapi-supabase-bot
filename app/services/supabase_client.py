@@ -199,8 +199,10 @@ class SupabaseService:
         if start_date is None:
             start_date = end_date - dt.timedelta(days=30)
 
+        logger.info("Fetching metrics summary: %s to %s", start_date.isoformat(), end_date.isoformat())
         containers = self._fetch_containers(start_date, end_date, max_rows)
         vehicles = self._fetch_vehicles(start_date, end_date, max_rows)
+        logger.info("Metrics summary: %d containers, %d vehicles", len(containers), len(vehicles))
 
         container_daily: dict[str, int] = {}
         container_by_line: dict[str, int] = {}

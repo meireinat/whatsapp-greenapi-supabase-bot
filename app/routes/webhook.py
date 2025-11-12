@@ -158,16 +158,26 @@ async def handle_webhook(
     logger.info("Intent matched: %s (parameters: %s)", intent.name if intent else "None", intent.parameters if intent else "None")
 
     if not intent:
+        logger.info("No intent matched, using Gemini or fallback")
         if gemini_service:
+            logger.info("Gemini service available, fetching metrics...")
             metrics = supabase_service.get_metrics_summary()
+            logger.info("Metrics fetched, calling Gemini with question: %s", incoming_text)
             response_text = await gemini_service.answer_question(
                 question=incoming_text, metrics=metrics
             )
+            logger.info("Gemini response: %s", response_text[:200] if response_text else "None")
             if not response_text:
                 response_text = build_fallback_response()
         else:
+            logger.info("Gemini service not available, using fallback")
             response_text = build_fallback_response()
-        background_tasks.add_task(green_api_client.send_text_message, chat_id, response_text)
+        background_tasks.add_task(
+            send_message_with_error_handling,
+            green_api_client,
+            chat_id,
+            response_text,
+        )
         return Response(status_code=status.HTTP_202_ACCEPTED)
 
     if intent.name == "daily_containers_count":
