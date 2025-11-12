@@ -45,7 +45,20 @@ class SupabaseService:
                 )
         # Create client without schema to avoid encoding issues
         # Always use default schema (usually 'public')
-        self._client: Client = create_client(supabase_url, supabase_key)
+        logger.info("Creating Supabase client (schema will not be used)")
+        try:
+            self._client: Client = create_client(supabase_url, supabase_key)
+            logger.info("Supabase client created successfully")
+        except UnicodeEncodeError as e:
+            logger.error(
+                "UnicodeEncodeError when creating Supabase client: %s. "
+                "This may be caused by non-ASCII characters in environment variables. "
+                "Trying to create client without schema...",
+                e,
+                exc_info=True,
+            )
+            # Try to create client again - maybe the error was transient
+            self._client: Client = create_client(supabase_url, supabase_key)
         self._schema: str | None = None  # Always None to avoid encoding issues
 
     def get_daily_containers_count(self, target_date: dt.date) -> int:
@@ -104,7 +117,21 @@ class SupabaseService:
             end_date.strftime("%Y%m%d"),
         )
         try:
-            query = self._client.table("containers")
+            # Try to access table - this may trigger _init_postgrest_client
+            # which can fail if schema contains non-ASCII characters
+            try:
+                query = self._client.table("containers")
+            except UnicodeEncodeError as e:
+                logger.error(
+                    "UnicodeEncodeError when accessing table 'containers': %s. "
+                    "This is likely caused by SUPABASE_SCHEMA environment variable "
+                    "containing non-ASCII characters. Please remove or fix SUPABASE_SCHEMA in Railway. "
+                    "Returning 0.",
+                    e,
+                    exc_info=True,
+                )
+                return 0
+            
             # Note: schema() is not supported by Supabase Python client
             # All queries use the default schema (usually 'public')
             # Convert dates to YYYYMMDD format for comparison

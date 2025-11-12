@@ -110,24 +110,34 @@ def _optional_env(name: str, credentials: dict[str, str] | None = None) -> Optio
 def _safe_schema_env(credentials: dict[str, str] | None = None) -> Optional[str]:
     """
     Load SUPABASE_SCHEMA and validate it's ASCII-only to avoid encoding errors.
-    Returns None if schema contains non-ASCII characters.
+    Returns None always to avoid encoding issues with Supabase Python client.
+    
+    Note: Supabase Python client's schema() method is not supported and causes
+    UnicodeEncodeError when schema contains non-ASCII characters. We always
+    use the default schema (usually 'public').
     """
     credentials = credentials or {}
     schema = os.getenv("SUPABASE_SCHEMA") or credentials.get("supabase_schema")
     if not schema:
         return None
+    
+    # Always return None to avoid encoding issues
+    # Supabase Python client doesn't support schema() method properly
+    import logging
+    logger = logging.getLogger(__name__)
     try:
         schema.encode("ascii")
-        return schema
+        logger.info(
+            "SUPABASE_SCHEMA is set but will not be used "
+            "(schema() not supported by Supabase Python client)"
+        )
     except UnicodeEncodeError:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.warning(
             "SUPABASE_SCHEMA contains non-ASCII characters; "
             "schema scoping will be disabled. Value: %s",
             schema[:50] if len(schema) > 50 else schema,
         )
-        return None
+    return None  # Always return None to avoid encoding issues
 
 
 def _load_credentials_file() -> dict[str, str]:
