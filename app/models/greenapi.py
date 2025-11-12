@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 class MessageTextData(BaseModel):
     """Text message information nested within `messageData`."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     textMessage: str | None = None
 
@@ -18,7 +18,7 @@ class MessageTextData(BaseModel):
 class MessageData(BaseModel):
     """Subset of message data relevant for text-based automations."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     typeMessage: str
     textMessageData: MessageTextData | None = None
@@ -27,7 +27,7 @@ class MessageData(BaseModel):
 class SenderData(BaseModel):
     """Metadata about the sender of an incoming message."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     chatId: str
     sender: str | None = None
