@@ -22,6 +22,7 @@ from app.services.response_builder import (
     build_daily_containers_response,
     build_fallback_response,
     build_monthly_containers_response,
+    build_comparison_containers_response,
     build_vehicles_range_response,
 )
 from app.services.supabase_client import SupabaseService
@@ -201,6 +202,27 @@ async def handle_webhook(
         count = supabase_service.get_containers_count_monthly(month, year)
         logger.info("Monthly containers count result: %d", count)
         response_text = build_monthly_containers_response(count, month, year)
+    elif intent.name == "containers_count_comparison":
+        month1 = intent.parameters["month1"]
+        year1 = intent.parameters["year1"]
+        month2 = intent.parameters["month2"]
+        year2 = intent.parameters["year2"]
+        logger.info(
+            "Fetching comparison: month1=%d, year1=%d vs month2=%d, year2=%d",
+            month1, year1, month2, year2
+        )
+        comparison = supabase_service.get_containers_count_comparison(
+            month1, year1, month2, year2
+        )
+        logger.info(
+            "Comparison result: %d vs %d (difference: %d)",
+            comparison["count1"], comparison["count2"], comparison["difference"]
+        )
+        response_text = build_comparison_containers_response(
+            comparison["count1"], month1, year1,
+            comparison["count2"], month2, year2,
+            comparison["difference"],
+        )
         logger.info("Response text: %s", response_text)
     elif intent.name == "llm_analysis":
         if not gemini_service:

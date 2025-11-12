@@ -80,6 +80,18 @@ class IntentEngine:
         ),
     )
 
+    # Comparison patterns: "כמה מכולות בינואר 2024 לעומת ינואר 2025"
+    COMPARISON_MONTHLY_PATTERNS = (
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s*(?P<month1_name>\S+)\s+(?P<year1>\d{2,4})\s+(?:לעומת|מול|vs|versus)\s+(?:ב|בחודש)?\s*(?P<month2_name>\S+)\s+(?P<year2>\d{2,4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s*(?P<month1_name>\S+)\s+(?P<year1>\d{2,4})\s+(?:לעומת|מול|vs|versus)\s+(?:ב|בחודש)?\s*(?P<month2_name>\S+)(?:\s+(?P<year2>\d{2,4}))?",
+            re.IGNORECASE,
+        ),
+    )
+
     LLM_ANALYSIS_PATTERNS = (
         re.compile(r"\b(?:ניתוח|נתח|גמיני|Gemini|AI)\b", re.IGNORECASE),
     )
@@ -120,6 +132,21 @@ class IntentEngine:
                         name="vehicles_count_between",
                         parameters=dates,
                     )
+
+        # Check for comparison patterns first (more specific)
+        for i, pattern in enumerate(self.COMPARISON_MONTHLY_PATTERNS):
+            match = pattern.search(stripped)
+            if match:
+                logger.info("COMPARISON_MONTHLY_PATTERNS[%d] matched: %s", i, match.groupdict())
+                comparison_params = self._parse_comparison(match.groupdict())
+                if comparison_params:
+                    logger.info("Parsed comparison params: %s", comparison_params)
+                    return IntentResult(
+                        name="containers_count_comparison",
+                        parameters=comparison_params,
+                    )
+                else:
+                    logger.warning("Failed to parse comparison from: %s", match.groupdict())
 
         for i, pattern in enumerate(self.MONTHLY_CONTAINER_PATTERNS):
             match = pattern.search(stripped)
@@ -225,4 +252,34 @@ class IntentEngine:
             year = dt.date.today().year
         
         return {"month": month_num, "year": year}
+
+    @staticmethod
+    def _parse_comparison(groups: Mapping[str, str]) -> dict[str, int] | None:
+        """Parse two months for comparison: month1/year1 vs month2/year2."""
+        month1_params = IntentEngine._parse_month({
+            "month_name": groups.get("month1_name", ""),
+            "year": groups.get("year1", ""),
+        })
+        if not month1_params:
+            return None
+        
+        # For second month, use year2 if provided, otherwise use year1 (same year comparison)
+        year2_text = groups.get("year2", "")
+        if not year2_text:
+            # If no year2, assume same year as year1
+            year2_text = str(month1_params["year"])
+        
+        month2_params = IntentEngine._parse_month({
+            "month_name": groups.get("month2_name", ""),
+            "year": year2_text,
+        })
+        if not month2_params:
+            return None
+        
+        return {
+            "month1": month1_params["month"],
+            "year1": month1_params["year"],
+            "month2": month2_params["month"],
+            "year2": month2_params["year"],
+        }
 

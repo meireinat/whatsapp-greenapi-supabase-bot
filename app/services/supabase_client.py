@@ -624,6 +624,36 @@ class SupabaseService:
             )
             return 0
 
+    def get_containers_count_comparison(
+        self, month1: int, year1: int, month2: int, year2: int
+    ) -> dict[str, int]:
+        """
+        Compare container counts between two months.
+        Returns a dictionary with counts and difference.
+        """
+        logger.info(
+            "Comparing containers: month1=%d/%d vs month2=%d/%d",
+            month1, year1, month2, year2
+        )
+        count1 = self.get_containers_count_monthly(month1, year1)
+        count2 = self.get_containers_count_monthly(month2, year2)
+        difference = count2 - count1
+        
+        logger.info(
+            "Comparison result: %d (month1) vs %d (month2), difference: %d",
+            count1, count2, difference
+        )
+        
+        return {
+            "count1": count1,
+            "count2": count2,
+            "difference": difference,
+            "month1": month1,
+            "year1": year1,
+            "month2": month2,
+            "year2": year2,
+        }
+
     def get_metrics_summary(
         self,
         *,

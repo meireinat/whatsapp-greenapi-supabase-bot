@@ -46,6 +46,40 @@ def build_monthly_containers_response(count: int, month: int, year: int) -> str:
     )
 
 
+def build_comparison_containers_response(
+    count1: int, month1: int, year1: int,
+    count2: int, month2: int, year2: int,
+    difference: int,
+) -> str:
+    """Format response for monthly container count comparison."""
+    month_names_he = {
+        1: "ינואר", 2: "פברואר", 3: "מרץ", 4: "אפריל",
+        5: "מאי", 6: "יוני", 7: "יולי", 8: "אוגוסט",
+        9: "ספטמבר", 10: "אוקטובר", 11: "נובמבר", 12: "דצמבר",
+    }
+    month1_name = month_names_he.get(month1, f"חודש {month1}")
+    month2_name = month_names_he.get(month2, f"חודש {month2}")
+    
+    if difference > 0:
+        diff_text = f"עלייה של {difference} מכולות"
+        if count1 > 0:
+            percent = (difference / count1) * 100
+            diff_text += f" ({percent:+.1f}%)"
+    elif difference < 0:
+        diff_text = f"ירידה של {abs(difference)} מכולות"
+        if count1 > 0:
+            percent = (difference / count1) * 100
+            diff_text += f" ({percent:+.1f}%)"
+    else:
+        diff_text = "אותו מספר מכולות"
+    
+    return (
+        f"בחודש {month1_name} {year1} נפרקו {count1} מכולות.\n"
+        f"בחודש {month2_name} {year2} נפרקו {count2} מכולות.\n"
+        f"ההבדל: {diff_text}."
+    )
+
+
 def build_fallback_response() -> str:
     return (
         "מצטער, לא הצלחתי להבין את הבקשה. "
