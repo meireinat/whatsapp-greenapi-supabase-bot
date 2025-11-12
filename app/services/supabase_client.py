@@ -80,15 +80,20 @@ class SupabaseService:
             # Try to create client again - maybe the error was transient
             self._client: Client = create_client(supabase_url, supabase_key)
         finally:
-            # Only restore original value if it was ASCII (safe to restore)
-            # If it contained non-ASCII characters, don't restore it to avoid future errors
-            if original_schema and not schema_has_non_ascii:
-                os.environ["SUPABASE_SCHEMA"] = original_schema
-            elif original_schema and schema_has_non_ascii:
-                logger.info(
-                    "SUPABASE_SCHEMA not restored because it contained non-ASCII characters. "
-                    "Please remove or fix SUPABASE_SCHEMA in Railway environment variables."
-                )
+            # Never restore SUPABASE_SCHEMA to avoid encoding issues
+            # Even if it's ASCII, it can cause problems with Supabase client
+            # The Supabase client reads it during initialization and caches it
+            if original_schema:
+                if schema_has_non_ascii:
+                    logger.warning(
+                        "SUPABASE_SCHEMA not restored because it contained non-ASCII characters. "
+                        "Please remove or fix SUPABASE_SCHEMA in Railway environment variables."
+                    )
+                else:
+                    logger.info(
+                        "SUPABASE_SCHEMA not restored to avoid encoding issues. "
+                        "Please remove SUPABASE_SCHEMA from Railway environment variables if not needed."
+                    )
         
         self._schema: str | None = None  # Always None to avoid encoding issues
         self._supabase_url = supabase_url
@@ -143,11 +148,10 @@ class SupabaseService:
                 )
                 raise
         finally:
-            # Only restore original value if it was ASCII (safe to restore)
-            # If it contained non-ASCII characters, don't restore it to avoid future errors
-            if original_schema and not schema_has_non_ascii:
-                os.environ["SUPABASE_SCHEMA"] = original_schema
-            elif original_schema and schema_has_non_ascii:
+            # Never restore SUPABASE_SCHEMA to avoid encoding issues
+            # Even if it's ASCII, it can cause problems with Supabase client
+            # The Supabase client reads it during initialization and caches it
+            if original_schema:
                 # Don't restore - it will cause errors
                 pass
 
