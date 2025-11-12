@@ -275,15 +275,19 @@ class SupabaseService:
             
             # Also check for any other environment variables that might contain non-ASCII
             # and remove them temporarily
+            # NOTE: We only remove variables that contain actual non-ASCII characters (not ASCII that can't be encoded as latin-1)
             problematic_vars = {}
             for key, value in list(os.environ.items()):
                 if isinstance(value, str):
                     try:
-                        value.encode('latin-1')
+                        # Check if it's ASCII (not latin-1) - ASCII is a subset of latin-1
+                        value.encode('ascii')
                     except UnicodeEncodeError:
-                        # This variable contains non-ASCII characters
-                        problematic_vars[key] = os.environ.pop(key, None)
-                        logger.warning("Removed problematic environment variable %s (contains non-ASCII): %s", key, value[:50] if len(value) > 50 else value)
+                        # This variable contains actual non-ASCII characters (like Hebrew)
+                        # Only remove if it's not a critical variable
+                        if key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+                            problematic_vars[key] = os.environ.pop(key, None)
+                            logger.warning("Removed problematic environment variable %s (contains non-ASCII): %s", key, value[:50] if len(value) > 50 else value)
             
             # Log all remaining SUPABASE_* variables for debugging
             remaining_supabase_vars = {k: v[:20] + "..." if len(v) > 20 else v for k, v in os.environ.items() if k.startswith("SUPABASE_")}
@@ -297,14 +301,17 @@ class SupabaseService:
                     "Prefer": "count=exact",
                 }
                 # Ensure all header values are ASCII-safe
+                # NOTE: HTTP headers must be ASCII, but JWT tokens are ASCII (base64-encoded)
+                # So we check for ASCII, not latin-1
                 safe_headers = {}
                 for k, v in request_headers.items():
                     if isinstance(v, str):
                         try:
-                            v.encode('latin-1')
+                            # Check if it's ASCII (HTTP headers must be ASCII)
+                            v.encode('ascii')
                             safe_headers[k] = v
                         except UnicodeEncodeError:
-                            # Skip non-ASCII headers or encode them
+                            # Skip non-ASCII headers
                             logger.warning("Skipping header %s with non-ASCII value", k)
                     else:
                         safe_headers[k] = v
