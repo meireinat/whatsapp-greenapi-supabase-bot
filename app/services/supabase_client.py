@@ -85,7 +85,7 @@ class SupabaseService:
         
         Note: Even though we remove SUPABASE_SCHEMA from environment, the Supabase
         client may have already cached it during initialization. We catch the error
-        and return None to indicate failure.
+        and re-create the client without SUPABASE_SCHEMA in environment.
         """
         import os
         original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
@@ -96,20 +96,31 @@ class SupabaseService:
                 "UnicodeEncodeError when accessing table '%s': %s. "
                 "This is likely caused by SUPABASE_SCHEMA environment variable "
                 "containing non-ASCII characters that were cached during client initialization. "
-                "Please remove or fix SUPABASE_SCHEMA in Railway.",
+                "Re-creating client without SUPABASE_SCHEMA...",
                 table_name,
                 e,
                 exc_info=True,
             )
             # Re-create client without SUPABASE_SCHEMA in environment
-            # This is a workaround for the Supabase client caching the schema
-            logger.info("Re-creating Supabase client without SUPABASE_SCHEMA...")
+            # Make sure SUPABASE_SCHEMA is still removed before creating new client
+            if "SUPABASE_SCHEMA" in os.environ:
+                os.environ.pop("SUPABASE_SCHEMA", None)
             self._client = create_client(self._supabase_url, self._supabase_key)
-            logger.info("Supabase client re-created successfully")
-            # Try again
-            return self._client.table(table_name)
+            logger.info("Supabase client re-created successfully without SUPABASE_SCHEMA")
+            # Try again - should work now
+            try:
+                return self._client.table(table_name)
+            except UnicodeEncodeError as e2:
+                logger.error(
+                    "UnicodeEncodeError still occurs after re-creating client: %s. "
+                    "This suggests SUPABASE_SCHEMA is being set elsewhere. "
+                    "Please remove SUPABASE_SCHEMA from Railway environment variables.",
+                    e2,
+                    exc_info=True,
+                )
+                raise
         finally:
-            # Restore original value if it existed
+            # Restore original value if it existed (only after all operations complete)
             if original_schema:
                 os.environ["SUPABASE_SCHEMA"] = original_schema
 
