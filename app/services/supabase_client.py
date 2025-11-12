@@ -272,15 +272,28 @@ class SupabaseService:
         Persist interactions for auditing and analytics.
         """
         logger.debug("Logging query for user %s intent %s", user_phone, intent)
-        self._client.table("bot_queries_log").insert(
-            {
-                "user_phone": user_phone,
-                "user_text": user_text,
-                "intent": intent,
-                "parameters": parameters,
-                "response_text": response_text,
-            }
-        ).execute()
+        try:
+            # Convert parameters to JSON-serializable format
+            safe_parameters = {}
+            for key, value in parameters.items():
+                if isinstance(value, (str, int, float, bool, type(None))):
+                    safe_parameters[key] = value
+                elif isinstance(value, dt.date):
+                    safe_parameters[key] = value.isoformat()
+                else:
+                    safe_parameters[key] = str(value)
+            
+            self._client.table("bot_queries_log").insert(
+                {
+                    "user_phone": user_phone,
+                    "user_text": user_text,
+                    "intent": intent,
+                    "parameters": safe_parameters,
+                    "response_text": response_text,
+                }
+            ).execute()
+        except Exception as e:
+            logger.error("Failed to log query: %s", e, exc_info=True)
 
     def bulk_insert(
         self,

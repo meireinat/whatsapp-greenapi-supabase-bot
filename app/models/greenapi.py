@@ -41,7 +41,7 @@ class GreenWebhookPayload(BaseModel):
     The API exposes a broad schema; we extract the fields required for the bot flow.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     typeWebhook: str
     timestamp: int | None = None
