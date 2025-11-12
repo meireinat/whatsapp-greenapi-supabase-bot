@@ -106,10 +106,24 @@ class SupabaseService:
         self._supabase_url = supabase_url
         self._supabase_key = supabase_key
         
-        # Store parameters for direct HTTP requests using requests library
-        # We use requests instead of httpx to avoid UnicodeEncodeError issues
+        # Store parameters for direct HTTP requests using httpx
+        # We use httpx to avoid UnicodeEncodeError issues
         # with environment variables containing non-ASCII characters
         self._http_base_url = f"{supabase_url}/rest/v1"
+        
+        # Verify that supabase_key is ASCII before creating headers
+        try:
+            supabase_key.encode('ascii')
+            logger.debug("supabase_key is ASCII (length: %d)", len(supabase_key))
+        except UnicodeEncodeError as e:
+            logger.error(
+                "CRITICAL: supabase_key contains non-ASCII characters! "
+                "Length: %d, First 50 chars: %s, Error: %s",
+                len(supabase_key), supabase_key[:50] if len(supabase_key) > 50 else supabase_key, e
+            )
+            # This should never happen, but if it does, we need to handle it
+            raise ValueError("supabase_key must be ASCII") from e
+        
         self._http_headers = {
             "apikey": supabase_key,
             "Authorization": f"Bearer {supabase_key}",
