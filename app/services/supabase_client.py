@@ -49,11 +49,21 @@ class SupabaseService:
         # from reading it and causing UnicodeEncodeError
         import os
         original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
+        schema_has_non_ascii = False
         if original_schema:
-            logger.info(
-                "Removed SUPABASE_SCHEMA from environment to avoid encoding issues. "
-                "Original value contained non-ASCII characters."
-            )
+            try:
+                original_schema.encode("ascii")
+            except UnicodeEncodeError:
+                schema_has_non_ascii = True
+                logger.warning(
+                    "Removed SUPABASE_SCHEMA from environment to avoid encoding issues. "
+                    "Original value contained non-ASCII characters and will NOT be restored."
+                )
+            else:
+                logger.info(
+                    "Removed SUPABASE_SCHEMA from environment to avoid encoding issues. "
+                    "Original value was ASCII and will be restored."
+                )
         
         logger.info("Creating Supabase client (schema will not be used)")
         try:
@@ -70,9 +80,15 @@ class SupabaseService:
             # Try to create client again - maybe the error was transient
             self._client: Client = create_client(supabase_url, supabase_key)
         finally:
-            # Restore original value if it existed (though we won't use it)
-            if original_schema:
+            # Only restore original value if it was ASCII (safe to restore)
+            # If it contained non-ASCII characters, don't restore it to avoid future errors
+            if original_schema and not schema_has_non_ascii:
                 os.environ["SUPABASE_SCHEMA"] = original_schema
+            elif original_schema and schema_has_non_ascii:
+                logger.info(
+                    "SUPABASE_SCHEMA not restored because it contained non-ASCII characters. "
+                    "Please remove or fix SUPABASE_SCHEMA in Railway environment variables."
+                )
         
         self._schema: str | None = None  # Always None to avoid encoding issues
         self._supabase_url = supabase_url
@@ -89,6 +105,13 @@ class SupabaseService:
         """
         import os
         original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
+        schema_has_non_ascii = False
+        if original_schema:
+            try:
+                original_schema.encode("ascii")
+            except UnicodeEncodeError:
+                schema_has_non_ascii = True
+        
         try:
             return self._client.table(table_name)
         except UnicodeEncodeError as e:
@@ -120,9 +143,13 @@ class SupabaseService:
                 )
                 raise
         finally:
-            # Restore original value if it existed (only after all operations complete)
-            if original_schema:
+            # Only restore original value if it was ASCII (safe to restore)
+            # If it contained non-ASCII characters, don't restore it to avoid future errors
+            if original_schema and not schema_has_non_ascii:
                 os.environ["SUPABASE_SCHEMA"] = original_schema
+            elif original_schema and schema_has_non_ascii:
+                # Don't restore - it will cause errors
+                pass
 
     def get_daily_containers_count(self, target_date: dt.date) -> int:
         """
