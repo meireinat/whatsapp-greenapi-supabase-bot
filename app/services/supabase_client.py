@@ -48,18 +48,14 @@ class SupabaseService:
         logger.debug("Fetching container count for %s", target_date.isoformat())
         try:
             query = self._client.table("containers")
-            # Don't use schema() if schema contains non-ASCII characters
-            if self._schema:
-                try:
-                    self._schema.encode("ascii")
-                    query = query.schema(self._schema)
-                except UnicodeEncodeError:
-                    # Schema contains non-ASCII, skip it
-                    pass
+            # Note: schema() is not supported by Supabase Python client
+            # All queries use the default schema (usually 'public')
+            # Convert date to YYYYMMDD format for comparison
+            date_str = target_date.strftime("%Y%m%d")
             response = (
                 query.select("SHANA", count="exact")
-                .gte("TARICH_PRIKA", target_date.isoformat())
-                .lte("TARICH_PRIKA", target_date.isoformat())
+                .gte("TARICH_PRIKA", date_str)
+                .lte("TARICH_PRIKA", date_str)
                 .execute()
             )
 
@@ -90,6 +86,8 @@ class SupabaseService:
     ) -> int:
         """
         Count containers unloaded between the provided dates (inclusive).
+        
+        Note: TARICH_PRIKA is stored as YYYYMMDD format (string) in the database.
         """
         logger.debug(
             "Fetching container count between %s and %s",
@@ -98,17 +96,14 @@ class SupabaseService:
         )
         try:
             query = self._client.table("containers")
-            # Don't use schema() if schema contains non-ASCII characters
-            if self._schema:
-                try:
-                    self._schema.encode("ascii")
-                    query = query.schema(self._schema)
-                except UnicodeEncodeError:
-                    # Schema contains non-ASCII, skip it
-                    pass
+            # Note: schema() is not supported by Supabase Python client
+            # All queries use the default schema (usually 'public')
+            # Convert dates to YYYYMMDD format for comparison
+            start_str = start_date.strftime("%Y%m%d")
+            end_str = end_date.strftime("%Y%m%d")
             response = query.select("SHANA", count="exact").gte(
-                "TARICH_PRIKA", start_date.isoformat()
-            ).lte("TARICH_PRIKA", end_date.isoformat()).execute()
+                "TARICH_PRIKA", start_str
+            ).lte("TARICH_PRIKA", end_str).execute()
 
             count = getattr(response, "count", None)
             if count is not None:
@@ -138,14 +133,8 @@ class SupabaseService:
         )
         try:
             query = self._client.table("ramp_operations")
-            # Don't use schema() if schema contains non-ASCII characters
-            if self._schema:
-                try:
-                    self._schema.encode("ascii")
-                    query = query.schema(self._schema)
-                except UnicodeEncodeError:
-                    # Schema contains non-ASCII, skip it
-                    pass
+            # Note: schema() is not supported by Supabase Python client
+            # All queries use the default schema (usually 'public')
             response = query.select("vehicles_count, operation_date").gte(
                 "operation_date", start_date.isoformat()
             ).lte("operation_date", end_date.isoformat()).execute()
@@ -254,20 +243,17 @@ class SupabaseService:
     ) -> list[dict[str, Any]]:
         try:
             query = self._client.table("containers")
-            # Don't use schema() if schema contains non-ASCII characters
-            if self._schema:
-                try:
-                    self._schema.encode("ascii")
-                    query = query.schema(self._schema)
-                except UnicodeEncodeError:
-                    # Schema contains non-ASCII, skip it
-                    pass
+            # Note: schema() is not supported by Supabase Python client
+            # All queries use the default schema (usually 'public')
+            # Convert dates to YYYYMMDD format for comparison
+            start_str = start_date.strftime("%Y%m%d")
+            end_str = end_date.strftime("%Y%m%d")
             response = (
                 query.select(
                     "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
                 )
-                .gte("TARICH_PRIKA", start_date.isoformat())
-                .lte("TARICH_PRIKA", end_date.isoformat())
+                .gte("TARICH_PRIKA", start_str)
+                .lte("TARICH_PRIKA", end_str)
                 .order("TARICH_PRIKA", desc=False)
                 .limit(limit)
                 .execute()
@@ -287,14 +273,8 @@ class SupabaseService:
     ) -> list[dict[str, Any]]:
         try:
             query = self._client.table("ramp_operations")
-            # Don't use schema() if schema contains non-ASCII characters
-            if self._schema:
-                try:
-                    self._schema.encode("ascii")
-                    query = query.schema(self._schema)
-                except UnicodeEncodeError:
-                    # Schema contains non-ASCII, skip it
-                    pass
+            # Note: schema() is not supported by Supabase Python client
+            # All queries use the default schema (usually 'public')
             response = (
                 query.select("vehicles_count,containers_count,operation_date,ramp_id,shift")
                 .gte("operation_date", start_date.isoformat())
@@ -339,15 +319,8 @@ class SupabaseService:
             
             # Use table without schema to avoid encoding issues
             query = self._client.table("bot_queries_log")
-            # Don't use schema() if schema contains non-ASCII characters
-            # The schema is already filtered in __init__, but double-check here
-            if self._schema:
-                try:
-                    self._schema.encode("ascii")
-                    query = query.schema(self._schema)
-                except UnicodeEncodeError:
-                    # Schema contains non-ASCII, skip it
-                    pass
+            # Note: schema() is not supported by Supabase Python client
+            # All queries use the default schema (usually 'public')
             
             query.insert(
                 {
