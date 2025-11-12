@@ -108,32 +108,74 @@ class SupabaseService:
         # Clean supabase_key if it contains non-ASCII characters
         # Store the cleaned key for use in headers
         # NOTE: JWT tokens should be ASCII-only. If the key contains non-ASCII,
-        # it's likely corrupted. We'll try to clean it, but this may invalidate the key.
+        # it's likely corrupted. We'll try to fix common Hebrew character substitutions.
         try:
             supabase_key.encode('ascii')
             self._supabase_key = supabase_key
             logger.debug("supabase_key is ASCII (length: %d)", len(supabase_key))
         except UnicodeEncodeError as e:
-            # Remove non-ASCII characters
-            original_length = len(supabase_key)
-            self._supabase_key = ''.join(c for c in supabase_key if ord(c) < 128)
-            removed_count = original_length - len(self._supabase_key)
-            logger.error(
-                "CRITICAL: supabase_key contains %d non-ASCII characters! "
-                "Cleaned key length: %d -> %d. "
-                "This may invalidate the key. Please check SUPABASE_SERVICE_ROLE_KEY in Railway. "
-                "Error: %s",
-                removed_count, original_length, len(self._supabase_key), e
-            )
-            # Log first and last 50 chars of both keys for debugging
-            logger.error(
-                "Original key (first 50): %s, (last 50): %s",
-                supabase_key[:50], supabase_key[-50:] if len(supabase_key) > 50 else supabase_key
-            )
-            logger.error(
-                "Cleaned key (first 50): %s, (last 50): %s",
-                self._supabase_key[:50], self._supabase_key[-50:] if len(self._supabase_key) > 50 else self._supabase_key
-            )
+            # Try to fix common Hebrew character substitutions first
+            # Hebrew 'מ' (mem) is often confused with English 'M'
+            # Hebrew 'א' (alef) is often confused with English 'A'
+            # etc.
+            fixed_key = supabase_key
+            hebrew_to_english = {
+                'מ': 'M',  # mem -> M
+                'א': 'A',  # alef -> A
+                'ב': 'B',  # bet -> B
+                'ג': 'G',  # gimel -> G
+                'ד': 'D',  # dalet -> D
+                'ה': 'H',  # he -> H
+                'ו': 'V',  # vav -> V
+                'ז': 'Z',  # zayin -> Z
+                'ח': 'H',  # het -> H
+                'ט': 'T',  # tet -> T
+                'י': 'I',  # yod -> I
+                'כ': 'K',  # kaf -> K
+                'ל': 'L',  # lamed -> L
+                'נ': 'N',  # nun -> N
+                'ס': 'S',  # samekh -> S
+                'ע': 'A',  # ayin -> A
+                'פ': 'P',  # pe -> P
+                'צ': 'C',  # tsadi -> C
+                'ק': 'Q',  # qof -> Q
+                'ר': 'R',  # resh -> R
+                'ש': 'S',  # shin -> S
+                'ת': 'T',  # tav -> T
+            }
+            
+            # Try to fix Hebrew characters
+            for hebrew, english in hebrew_to_english.items():
+                if hebrew in fixed_key:
+                    fixed_key = fixed_key.replace(hebrew, english)
+                    logger.warning("Replaced Hebrew character '%s' with '%s' in supabase_key", hebrew, english)
+            
+            # Check if fixed key is now ASCII
+            try:
+                fixed_key.encode('ascii')
+                self._supabase_key = fixed_key
+                logger.info("Fixed supabase_key by replacing Hebrew characters (length: %d)", len(self._supabase_key))
+            except UnicodeEncodeError:
+                # Still has non-ASCII, remove all non-ASCII characters
+                original_length = len(supabase_key)
+                self._supabase_key = ''.join(c for c in supabase_key if ord(c) < 128)
+                removed_count = original_length - len(self._supabase_key)
+                logger.error(
+                    "CRITICAL: supabase_key contains %d non-ASCII characters that couldn't be fixed! "
+                    "Cleaned key length: %d -> %d. "
+                    "This will invalidate the key. Please check SUPABASE_SERVICE_ROLE_KEY in Railway. "
+                    "Error: %s",
+                    removed_count, original_length, len(self._supabase_key), e
+                )
+                # Log first and last 50 chars of both keys for debugging
+                logger.error(
+                    "Original key (first 50): %s, (last 50): %s",
+                    supabase_key[:50], supabase_key[-50:] if len(supabase_key) > 50 else supabase_key
+                )
+                logger.error(
+                    "Cleaned key (first 50): %s, (last 50): %s",
+                    self._supabase_key[:50], self._supabase_key[-50:] if len(self._supabase_key) > 50 else self._supabase_key
+                )
         
         # Store parameters for direct HTTP requests using httpx
         # We use httpx to avoid UnicodeEncodeError issues
