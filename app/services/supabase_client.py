@@ -26,20 +26,27 @@ class SupabaseService:
         schema: str | None = None,
     ) -> None:
         # Filter out non-ASCII schema values before creating client
+        # Always set to None to avoid any encoding issues with Supabase client
         safe_schema: str | None = None
         if schema:
             try:
                 schema.encode("ascii")
-                safe_schema = schema
+                # Even if ASCII, don't use schema() as it's not supported
+                # and may cause encoding issues in PostgREST client
+                safe_schema = None
+                logger.info(
+                    "Schema provided but not used (schema() not supported by Supabase Python client)"
+                )
             except UnicodeEncodeError:
                 logger.warning(
                     "Supabase schema '%s' contains non-ASCII characters; "
                     "schema scoping will be disabled to avoid encoding issues.",
-                    schema,
+                    schema[:50] if len(schema) > 50 else schema,
                 )
         # Create client without schema to avoid encoding issues
+        # Always use default schema (usually 'public')
         self._client: Client = create_client(supabase_url, supabase_key)
-        self._schema: str | None = safe_schema
+        self._schema: str | None = None  # Always None to avoid encoding issues
 
     def get_daily_containers_count(self, target_date: dt.date) -> int:
         """
@@ -104,9 +111,22 @@ class SupabaseService:
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
             logger.debug("Query: TARICH_PRIKA >= %s AND TARICH_PRIKA <= %s", start_str, end_str)
-            response = query.select("SHANA", count="exact").gte(
-                "TARICH_PRIKA", start_str
-            ).lte("TARICH_PRIKA", end_str).execute()
+            
+            # Build query step by step to catch encoding errors early
+            try:
+                query = query.select("SHANA", count="exact")
+                query = query.gte("TARICH_PRIKA", start_str)
+                query = query.lte("TARICH_PRIKA", end_str)
+                response = query.execute()
+            except UnicodeEncodeError as e:
+                logger.error(
+                    "UnicodeEncodeError during query construction/execution: %s. "
+                    "This may be caused by non-ASCII characters in Supabase configuration. "
+                    "Returning 0.",
+                    e,
+                    exc_info=True,
+                )
+                return 0
 
             count = getattr(response, "count", None)
             logger.info("Query response count: %s", count)
@@ -121,6 +141,7 @@ class SupabaseService:
                 "This may be caused by non-ASCII characters in Supabase configuration. "
                 "Returning 0.",
                 e,
+                exc_info=True,
             )
             return 0
 
