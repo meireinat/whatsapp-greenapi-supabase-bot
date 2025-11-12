@@ -8,7 +8,9 @@ import datetime as dt
 import logging
 from typing import Any, Iterable, List, Mapping
 
-import requests
+import json
+import urllib.request
+import urllib.parse
 from supabase import Client, create_client
 
 logger = logging.getLogger(__name__)
@@ -255,27 +257,22 @@ class SupabaseService:
             url = f"/containers?{query_params}"
             logger.info("PostgREST URL: %s", url)
             
-            # Make request using requests library directly
-            # This avoids UnicodeEncodeError issues with httpx and environment variables
-            # IMPORTANT: Remove SUPABASE_SCHEMA from environment before making request
-            # because requests/urllib3 reads it and tries to encode it as latin-1
+            # Make request using urllib.request directly to avoid encoding issues
+            # with environment variables containing non-ASCII characters
+            # urllib.request doesn't read environment variables like requests/urllib3 does
             import os
-            original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
-            if "SUPABASE_SCHEMA" in os.environ:
-                os.environ.pop("SUPABASE_SCHEMA", None)
+            # Remove ALL SUPABASE_* variables except URL and KEY to be safe
+            # This ensures no environment variable with non-ASCII characters
+            # is read by any library
+            all_removed = {}
+            for key in list(os.environ.keys()):
+                if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+                    removed = os.environ.pop(key, None)
+                    if removed:
+                        all_removed[key] = removed
+                        logger.debug("Removed %s from environment before request", key)
             
             try:
-                # Remove ALL SUPABASE_* variables except URL and KEY to be safe
-                # This ensures no environment variable with non-ASCII characters
-                # is read by requests/urllib3
-                all_removed = {}
-                for key in list(os.environ.keys()):
-                    if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
-                        removed = os.environ.pop(key, None)
-                        if removed:
-                            all_removed[key] = removed
-                            logger.debug("Removed %s from environment before request", key)
-                
                 request_headers = {
                     **self._http_headers,
                     "Range-Unit": "items",
@@ -283,12 +280,21 @@ class SupabaseService:
                 }
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
-                logger.debug("Request headers (without sensitive data): %s", {k: v[:20] + "..." if len(v) > 20 else v for k, v in request_headers.items() if k != "Authorization"})
-                response = requests.get(
-                    full_url,
-                    headers=request_headers,
-                    timeout=self._http_timeout,
-                )
+                
+                # Use urllib.request directly to avoid encoding issues
+                req = urllib.request.Request(full_url, headers=request_headers)
+                with urllib.request.urlopen(req, timeout=self._http_timeout) as response:
+                    status_code = response.getcode()
+                    response_headers = dict(response.headers)
+                    response_data = response.read()
+                    
+                    logger.info("Response status: %s", status_code)
+                    logger.info("Response headers: %s", response_headers)
+                    
+                    if status_code >= 400:
+                        error_msg = f"HTTP {status_code}: {response_data[:500].decode('utf-8', errors='replace')}"
+                        logger.error("HTTP error when fetching containers count: %s. Returning 0.", error_msg)
+                        return 0
             except UnicodeEncodeError as e:
                 logger.error(
                     "UnicodeEncodeError when making request: %s. "
@@ -298,16 +304,20 @@ class SupabaseService:
                     exc_info=True,
                 )
                 return 0
+            except Exception as e:
+                logger.error(
+                    "Error when making request: %s. Returning 0.",
+                    e,
+                    exc_info=True,
+                )
+                return 0
             finally:
                 # Never restore SUPABASE_SCHEMA or other removed variables
-                if original_schema or all_removed:
+                if all_removed:
                     logger.debug("Removed SUPABASE_* variables before making request, will not be restored")
-            logger.info("Response status: %s", response.status_code)
-            logger.info("Response headers: %s", dict(response.headers))
-            response.raise_for_status()
             
             # Get count from Content-Range header if available
-            content_range = response.headers.get("Content-Range", "")
+            content_range = response_headers.get("Content-Range", "")
             logger.info("Content-Range header: %s", content_range)
             if content_range:
                 # Format: "0-9/100" where 100 is the total count
@@ -320,34 +330,29 @@ class SupabaseService:
                     logger.warning("Content-Range header format unexpected: %s", content_range)
             
             # Fallback to counting items in response
-            data = response.json()
-            logger.info("Response data type: %s, length: %s", type(data), len(data) if isinstance(data, list) else "N/A")
-            if isinstance(data, list):
-                count = len(data)
-                logger.info("Query response count from data length: %s", count)
-                # If we got a limited result set, the count might be in Content-Range
-                # But if Content-Range wasn't available, we return the length
-                # NOTE: This might not be accurate if PostgREST limits results
-                if count > 0:
-                    logger.warning(
-                        "Got %d items in response but no Content-Range header. "
-                        "This might be a partial result. Consider using count=exact header.",
-                        count
-                    )
-                return count
-            else:
-                logger.warning("Response data is not a list: %s", type(data))
-                logger.warning("Response data content: %s", str(data)[:500])
+            try:
+                data = json.loads(response_data.decode('utf-8'))
+                logger.info("Response data type: %s, length: %s", type(data), len(data) if isinstance(data, list) else "N/A")
+                if isinstance(data, list):
+                    count = len(data)
+                    logger.info("Query response count from data length: %s", count)
+                    # If we got a limited result set, the count might be in Content-Range
+                    # But if Content-Range wasn't available, we return the length
+                    # NOTE: This might not be accurate if PostgREST limits results
+                    if count > 0:
+                        logger.warning(
+                            "Got %d items in response but no Content-Range header. "
+                            "This might be a partial result. Consider using count=exact header.",
+                            count
+                        )
+                    return count
+                else:
+                    logger.warning("Response data is not a list: %s", type(data))
+                    logger.warning("Response data content: %s", str(data)[:500])
+                    return 0
+            except json.JSONDecodeError as e:
+                logger.error("Failed to parse JSON response: %s. Response: %s", e, response_data[:500])
                 return 0
-        except requests.exceptions.HTTPError as e:
-            logger.error(
-                "HTTP error when fetching containers count: %s. "
-                "Response: %s. Returning 0.",
-                e,
-                e.response.text[:500] if e.response else "No response body",
-                exc_info=True,
-            )
-            return 0
         except Exception as e:
             logger.error(
                 "Error when fetching containers count between dates: %s. "
