@@ -91,11 +91,16 @@ async def handle_webhook(
         if not authorization:
             logger.warning("Missing authorization header for webhook call")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+        logger.info("Authorization header received: %s", authorization[:50] + "..." if len(authorization) > 50 else authorization)
         scheme, _, token = authorization.partition(" ")
         provided = token if scheme.lower() == "bearer" else authorization.strip()
+        logger.info("Extracted token: %s (scheme: %s)", provided[:20] + "..." if len(provided) > 20 else provided, scheme)
         if provided != webhook_token:
-            logger.warning("Invalid webhook token provided")
+            logger.warning("Invalid webhook token provided. Expected: %s, Got: %s", 
+                         webhook_token[:20] + "..." if len(webhook_token) > 20 else webhook_token,
+                         provided[:20] + "..." if len(provided) > 20 else provided)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+        logger.info("Authorization successful")
 
     # Only process incomingMessageReceived webhooks
     if payload.typeWebhook != "incomingMessageReceived":
