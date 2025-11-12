@@ -26,11 +26,40 @@ from app.services.response_builder import (
 )
 from app.services.supabase_client import SupabaseService
 from app.services.gemini_client import GeminiService
-from app.services.greenapi_client import GreenAPIClient
+from app.services.greenapi_client import GreenAPIClient, GreenAPIQuotaExceededError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/green", tags=["green-api"])
+
+
+async def send_message_with_error_handling(
+    client: GreenAPIClient, chat_id: str, message: str
+) -> None:
+    """
+    Send a message via Green API with proper error handling.
+    Logs quota exceeded errors but doesn't crash the webhook.
+    """
+    try:
+        await client.send_text_message(chat_id, message)
+        logger.info("Message sent successfully to %s", chat_id)
+    except GreenAPIQuotaExceededError as e:
+        logger.error(
+            "Failed to send message to %s: Green API quota exceeded. "
+            "User will not receive response. Error: %s",
+            chat_id,
+            e,
+        )
+        # Don't re-raise - allow webhook to complete
+        # The user won't get a response, but at least we logged it
+    except Exception as e:
+        logger.error(
+            "Failed to send message to %s: %s",
+            chat_id,
+            e,
+            exc_info=True,
+        )
+        # Don't re-raise - allow webhook to complete
 
 
 def get_intent_engine() -> IntentEngine:
@@ -185,11 +214,14 @@ async def handle_webhook(
     logger.info("Chat ID: %s, Response length: %d chars", chat_id, len(response_text))
     logger.info("Response preview: %s", response_text[:150])
     
-    try:
-        background_tasks.add_task(green_api_client.send_text_message, chat_id, response_text)
-        logger.info("Message queued for sending to %s", chat_id)
-    except Exception as e:
-        logger.error("Failed to queue message: %s", e, exc_info=True)
+    # Queue message with proper error handling
+    background_tasks.add_task(
+        send_message_with_error_handling,
+        green_api_client,
+        chat_id,
+        response_text,
+    )
+    logger.info("Message queued for sending to %s", chat_id)
     
     try:
         supabase_service.log_query(
