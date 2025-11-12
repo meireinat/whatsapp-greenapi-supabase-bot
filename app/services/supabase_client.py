@@ -145,16 +145,28 @@ class SupabaseService:
             }
             
             # Try to fix Hebrew characters
+            replacements_made = []
             for hebrew, english in hebrew_to_english.items():
                 if hebrew in fixed_key:
                     fixed_key = fixed_key.replace(hebrew, english)
+                    replacements_made.append(f"{hebrew}->{english}")
                     logger.warning("Replaced Hebrew character '%s' with '%s' in supabase_key", hebrew, english)
             
             # Check if fixed key is now ASCII
             try:
                 fixed_key.encode('ascii')
                 self._supabase_key = fixed_key
-                logger.info("Fixed supabase_key by replacing Hebrew characters (length: %d)", len(self._supabase_key))
+                logger.info(
+                    "Fixed supabase_key by replacing Hebrew characters (length: %d, replacements: %s)",
+                    len(self._supabase_key),
+                    ", ".join(replacements_made) if replacements_made else "none"
+                )
+                # Log a sample of the fixed key for debugging (first 50 and last 50 chars)
+                logger.info(
+                    "Fixed key sample (first 50): %s, (last 50): %s",
+                    self._supabase_key[:50],
+                    self._supabase_key[-50:] if len(self._supabase_key) > 50 else self._supabase_key
+                )
             except UnicodeEncodeError:
                 # Still has non-ASCII, remove all non-ASCII characters
                 original_length = len(supabase_key)
@@ -408,8 +420,16 @@ class SupabaseService:
                 # Log what headers we're actually sending
                 logger.info("Sending headers: %s", list(safe_headers.keys()))
                 logger.debug("apikey header length: %d, Authorization header length: %d", 
-                           len(safe_headers.get('apikey', '')), 
-                           len(safe_headers.get('Authorization', '')))
+                             len(safe_headers.get('apikey', '')), 
+                             len(safe_headers.get('Authorization', '')))
+                # Log a sample of the key being used (first 50 and last 50 chars)
+                apikey_value = safe_headers.get('apikey', '')
+                if apikey_value:
+                    logger.info(
+                        "Using supabase_key for request (first 50): %s, (last 50): %s",
+                        apikey_value[:50],
+                        apikey_value[-50:] if len(apikey_value) > 50 else apikey_value
+                    )
                 
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
