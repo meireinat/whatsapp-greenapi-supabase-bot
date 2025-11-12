@@ -107,13 +107,33 @@ class SupabaseService:
         
         # Clean supabase_key if it contains non-ASCII characters
         # Store the cleaned key for use in headers
+        # NOTE: JWT tokens should be ASCII-only. If the key contains non-ASCII,
+        # it's likely corrupted. We'll try to clean it, but this may invalidate the key.
         try:
             supabase_key.encode('ascii')
             self._supabase_key = supabase_key
-        except UnicodeEncodeError:
+            logger.debug("supabase_key is ASCII (length: %d)", len(supabase_key))
+        except UnicodeEncodeError as e:
             # Remove non-ASCII characters
+            original_length = len(supabase_key)
             self._supabase_key = ''.join(c for c in supabase_key if ord(c) < 128)
-            logger.warning("Cleaned supabase_key: removed %d non-ASCII characters", len(supabase_key) - len(self._supabase_key))
+            removed_count = original_length - len(self._supabase_key)
+            logger.error(
+                "CRITICAL: supabase_key contains %d non-ASCII characters! "
+                "Cleaned key length: %d -> %d. "
+                "This may invalidate the key. Please check SUPABASE_SERVICE_ROLE_KEY in Railway. "
+                "Error: %s",
+                removed_count, original_length, len(self._supabase_key), e
+            )
+            # Log first and last 50 chars of both keys for debugging
+            logger.error(
+                "Original key (first 50): %s, (last 50): %s",
+                supabase_key[:50], supabase_key[-50:] if len(supabase_key) > 50 else supabase_key
+            )
+            logger.error(
+                "Cleaned key (first 50): %s, (last 50): %s",
+                self._supabase_key[:50], self._supabase_key[-50:] if len(self._supabase_key) > 50 else self._supabase_key
+            )
         
         # Store parameters for direct HTTP requests using httpx
         # We use httpx to avoid UnicodeEncodeError issues
