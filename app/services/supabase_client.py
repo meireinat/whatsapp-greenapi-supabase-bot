@@ -45,25 +45,31 @@ class SupabaseService:
                 )
         # Create client without schema to avoid encoding issues
         # Always use default schema (usually 'public')
-        # Remove SUPABASE_SCHEMA from environment to prevent Supabase client
-        # from reading it and causing UnicodeEncodeError
+        # Remove SUPABASE_SCHEMA and any other SUPABASE_* variables with non-ASCII
+        # characters from environment to prevent Supabase client from reading them
+        # and causing UnicodeEncodeError
         import os
-        original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
-        schema_has_non_ascii = False
-        if original_schema:
-            try:
-                original_schema.encode("ascii")
-            except UnicodeEncodeError:
-                schema_has_non_ascii = True
-                logger.warning(
-                    "Removed SUPABASE_SCHEMA from environment to avoid encoding issues. "
-                    "Original value contained non-ASCII characters and will NOT be restored."
-                )
-            else:
-                logger.info(
-                    "Removed SUPABASE_SCHEMA from environment to avoid encoding issues. "
-                    "Original value was ASCII and will be restored."
-                )
+        
+        # Remove SUPABASE_SCHEMA and any other problematic SUPABASE_* variables
+        removed_vars = {}
+        for key in list(os.environ.keys()):
+            if key.startswith("SUPABASE_") and key != "SUPABASE_URL" and key != "SUPABASE_SERVICE_ROLE_KEY":
+                value = os.environ.pop(key, None)
+                if value:
+                    try:
+                        value.encode("ascii")
+                        # Even if ASCII, don't restore it to avoid issues
+                        removed_vars[key] = value
+                        logger.info(
+                            "Removed %s from environment to avoid encoding issues (will not be restored)",
+                            key
+                        )
+                    except UnicodeEncodeError:
+                        removed_vars[key] = value
+                        logger.warning(
+                            "Removed %s from environment (contains non-ASCII characters, will not be restored)",
+                            key
+                        )
         
         logger.info("Creating Supabase client (schema will not be used)")
         try:
@@ -73,27 +79,27 @@ class SupabaseService:
             logger.error(
                 "UnicodeEncodeError when creating Supabase client: %s. "
                 "This may be caused by non-ASCII characters in environment variables. "
-                "Trying to create client without schema...",
+                "Trying to create client again...",
                 e,
                 exc_info=True,
             )
-            # Try to create client again - maybe the error was transient
+            # Make sure all problematic variables are still removed
+            for key in list(os.environ.keys()):
+                if key.startswith("SUPABASE_") and key != "SUPABASE_URL" and key != "SUPABASE_SERVICE_ROLE_KEY":
+                    os.environ.pop(key, None)
+            # Try to create client again
             self._client: Client = create_client(supabase_url, supabase_key)
+            logger.info("Supabase client created successfully after removing problematic variables")
         finally:
-            # Never restore SUPABASE_SCHEMA to avoid encoding issues
-            # Even if it's ASCII, it can cause problems with Supabase client
-            # The Supabase client reads it during initialization and caches it
-            if original_schema:
-                if schema_has_non_ascii:
-                    logger.warning(
-                        "SUPABASE_SCHEMA not restored because it contained non-ASCII characters. "
-                        "Please remove or fix SUPABASE_SCHEMA in Railway environment variables."
-                    )
-                else:
-                    logger.info(
-                        "SUPABASE_SCHEMA not restored to avoid encoding issues. "
-                        "Please remove SUPABASE_SCHEMA from Railway environment variables if not needed."
-                    )
+            # Never restore removed variables to avoid encoding issues
+            # Even if they're ASCII, they can cause problems with Supabase client
+            # The Supabase client reads them during initialization and caches them
+            if removed_vars:
+                logger.info(
+                    "Removed %d SUPABASE_* environment variable(s) to avoid encoding issues. "
+                    "These will not be restored. Please remove them from Railway environment variables.",
+                    len(removed_vars)
+                )
         
         self._schema: str | None = None  # Always None to avoid encoding issues
         self._supabase_url = supabase_url
@@ -109,13 +115,26 @@ class SupabaseService:
         and re-create the client without SUPABASE_SCHEMA in environment.
         """
         import os
+        
+        # Remove SUPABASE_SCHEMA from environment before any operation
+        # This must be done before accessing the client, as the client
+        # may read it during initialization
         original_schema = os.environ.pop("SUPABASE_SCHEMA", None)
-        schema_has_non_ascii = False
-        if original_schema:
-            try:
-                original_schema.encode("ascii")
-            except UnicodeEncodeError:
-                schema_has_non_ascii = True
+        
+        # Also check for any other environment variables that might contain
+        # non-ASCII characters that could interfere with Supabase client
+        # We'll filter them out temporarily
+        problematic_vars = {}
+        for key, value in list(os.environ.items()):
+            if key.startswith("SUPABASE_") and value:
+                try:
+                    value.encode("ascii")
+                except UnicodeEncodeError:
+                    problematic_vars[key] = os.environ.pop(key)
+                    logger.warning(
+                        "Temporarily removed %s from environment (contains non-ASCII characters)",
+                        key
+                    )
         
         try:
             return self._client.table(table_name)
@@ -133,6 +152,15 @@ class SupabaseService:
             # Make sure SUPABASE_SCHEMA is still removed before creating new client
             if "SUPABASE_SCHEMA" in os.environ:
                 os.environ.pop("SUPABASE_SCHEMA", None)
+            
+            # Remove any other problematic SUPABASE_* variables
+            for key in list(os.environ.keys()):
+                if key.startswith("SUPABASE_") and key != "SUPABASE_URL" and key != "SUPABASE_SERVICE_ROLE_KEY":
+                    value = os.environ.pop(key, None)
+                    if value:
+                        problematic_vars[key] = value
+            
+            # Create a completely fresh client
             self._client = create_client(self._supabase_url, self._supabase_key)
             logger.info("Supabase client re-created successfully without SUPABASE_SCHEMA")
             # Try again - should work now
@@ -141,19 +169,22 @@ class SupabaseService:
             except UnicodeEncodeError as e2:
                 logger.error(
                     "UnicodeEncodeError still occurs after re-creating client: %s. "
-                    "This suggests SUPABASE_SCHEMA is being set elsewhere. "
+                    "This suggests SUPABASE_SCHEMA is being set elsewhere or "
+                    "the Supabase Python client has a bug with non-ASCII environment variables. "
                     "Please remove SUPABASE_SCHEMA from Railway environment variables.",
                     e2,
                     exc_info=True,
                 )
                 raise
         finally:
-            # Never restore SUPABASE_SCHEMA to avoid encoding issues
-            # Even if it's ASCII, it can cause problems with Supabase client
-            # The Supabase client reads it during initialization and caches it
-            if original_schema:
-                # Don't restore - it will cause errors
-                pass
+            # Never restore SUPABASE_SCHEMA or other problematic variables
+            # Even if they're ASCII, they can cause problems with Supabase client
+            # The Supabase client reads them during initialization and caches them
+            if original_schema or problematic_vars:
+                logger.debug(
+                    "Not restoring SUPABASE_SCHEMA or other problematic variables "
+                    "to avoid encoding issues with Supabase client"
+                )
 
     def get_daily_containers_count(self, target_date: dt.date) -> int:
         """
