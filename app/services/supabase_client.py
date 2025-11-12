@@ -687,55 +687,248 @@ class SupabaseService:
     def _fetch_containers(
         self, start_date: dt.date, end_date: dt.date, limit: int
     ) -> list[dict[str, Any]]:
+        """
+        Fetch container records between dates using httpx directly to avoid encoding issues.
+        
+        Note: TARICH_PRIKA is stored as YYYYMMDD format (string) in the database.
+        """
         try:
-            query = self._safe_table_access("containers")
-            # Note: schema() is not supported by Supabase Python client
-            # All queries use the default schema (usually 'public')
+            # Use httpx directly to avoid UnicodeEncodeError from Supabase client
             # Convert dates to YYYYMMDD format for comparison
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
-            response = (
-                query.select(
-                    "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"
+            
+            from urllib.parse import urlencode
+            import os
+            
+            # Build query parameters
+            query_params = urlencode([
+                ("select", "KMUT,SUG_ARIZA_MITZ,SHEM_IZ,SHEM_AR,TARICH_PRIKA,TARGET,SHIPNAME,PEULA,MANIFEST"),
+                ("TARICH_PRIKA", f"gte.{start_str}"),
+                ("TARICH_PRIKA", f"lte.{end_str}"),
+                ("order", "TARICH_PRIKA.asc"),
+                ("limit", str(limit)),
+            ], doseq=True)
+            url = f"/containers?{query_params}"
+            logger.debug("Fetching containers: %s", url)
+            
+            # Remove ALL SUPABASE_* variables except URL and KEY to be safe
+            all_removed = {}
+            for key in list(os.environ.keys()):
+                if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+                    removed = os.environ.pop(key, None)
+                    if removed:
+                        all_removed[key] = removed
+                        logger.debug("Removed %s from environment before request", key)
+            
+            # Also check for any other environment variables that might contain non-ASCII
+            problematic_vars = {}
+            for key, value in list(os.environ.items()):
+                if isinstance(value, str):
+                    try:
+                        value.encode('ascii')
+                    except UnicodeEncodeError:
+                        if key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+                            problematic_vars[key] = os.environ.pop(key, None)
+                            logger.warning("Removed problematic environment variable %s (contains non-ASCII)", key)
+            
+            try:
+                request_headers = {
+                    **self._http_headers,
+                    "Range-Unit": "items",
+                    "Prefer": "return=representation",
+                }
+                
+                # Ensure all header values are ASCII-safe
+                safe_headers = {}
+                for k, v in request_headers.items():
+                    if isinstance(v, str):
+                        try:
+                            v.encode('ascii')
+                            safe_headers[k] = v
+                        except UnicodeEncodeError:
+                            logger.warning("Skipping header %s with non-ASCII value", k)
+                    else:
+                        safe_headers[k] = v
+                
+                # Always ensure apikey and Authorization headers are present
+                if 'apikey' not in safe_headers:
+                    safe_headers['apikey'] = self._supabase_key
+                if 'Authorization' not in safe_headers:
+                    safe_headers['Authorization'] = f"Bearer {self._supabase_key}"
+                
+                full_url = f"{self._http_base_url}{url}"
+                logger.debug("Making GET request to: %s", full_url)
+                
+                # Use httpx with explicit headers to avoid encoding issues
+                with httpx.Client(timeout=self._http_timeout, verify=True) as client:
+                    response = client.get(full_url, headers=safe_headers)
+                    
+                    if response.status_code >= 400:
+                        error_msg = f"HTTP {response.status_code}: {response.text[:500]}"
+                        logger.error("HTTP error when fetching containers: %s. Returning empty list.", error_msg)
+                        return []
+                    
+                    # Parse JSON response
+                    data = response.json()
+                    if isinstance(data, list):
+                        logger.debug("Fetched %d container records", len(data))
+                        return data
+                    else:
+                        logger.warning("Response data is not a list: %s", type(data))
+                        return []
+            except UnicodeEncodeError as e:
+                logger.error(
+                    "UnicodeEncodeError when fetching containers: %s. "
+                    "This may be caused by non-ASCII characters in environment variables. "
+                    "Returning empty result.",
+                    e,
+                    exc_info=True,
                 )
-                .gte("TARICH_PRIKA", start_str)
-                .lte("TARICH_PRIKA", end_str)
-                .order("TARICH_PRIKA", desc=False)
-                .limit(limit)
-                .execute()
-            )
-            return list(getattr(response, "data", []))
-        except UnicodeEncodeError as e:
+                return []
+            except Exception as e:
+                logger.error(
+                    "Error when fetching containers: %s. Returning empty result.",
+                    e,
+                    exc_info=True,
+                )
+                return []
+            finally:
+                # Never restore removed variables
+                if all_removed or problematic_vars:
+                    logger.debug(
+                        "Removed %d SUPABASE_* variables and %d problematic variables before request, will not be restored",
+                        len(all_removed),
+                        len(problematic_vars)
+                    )
+        except Exception as e:
             logger.error(
-                "UnicodeEncodeError when fetching containers: %s. "
-                "This may be caused by non-ASCII characters in Supabase configuration. "
-                "Returning empty result.",
+                "Error when fetching containers: %s. Returning empty result.",
                 e,
+                exc_info=True,
             )
             return []
 
     def _fetch_vehicles(
         self, start_date: dt.date, end_date: dt.date, limit: int
     ) -> list[dict[str, Any]]:
+        """
+        Fetch vehicle records between dates using httpx directly to avoid encoding issues.
+        """
         try:
-            query = self._safe_table_access("ramp_operations")
-            # Note: schema() is not supported by Supabase Python client
-            # All queries use the default schema (usually 'public')
-            response = (
-                query.select("vehicles_count,containers_count,operation_date,ramp_id,shift")
-                .gte("operation_date", start_date.isoformat())
-                .lte("operation_date", end_date.isoformat())
-                .order("operation_date", desc=False)
-                .limit(limit)
-                .execute()
-            )
-            return list(getattr(response, "data", []))
-        except UnicodeEncodeError as e:
+            # Use httpx directly to avoid UnicodeEncodeError from Supabase client
+            # Convert dates to ISO format for comparison
+            start_str = start_date.isoformat()
+            end_str = end_date.isoformat()
+            
+            from urllib.parse import urlencode
+            import os
+            
+            # Build query parameters
+            query_params = urlencode([
+                ("select", "vehicles_count,containers_count,operation_date,ramp_id,shift"),
+                ("operation_date", f"gte.{start_str}"),
+                ("operation_date", f"lte.{end_str}"),
+                ("order", "operation_date.asc"),
+                ("limit", str(limit)),
+            ], doseq=True)
+            url = f"/ramp_operations?{query_params}"
+            logger.debug("Fetching vehicles: %s", url)
+            
+            # Remove ALL SUPABASE_* variables except URL and KEY to be safe
+            all_removed = {}
+            for key in list(os.environ.keys()):
+                if key.startswith("SUPABASE_") and key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+                    removed = os.environ.pop(key, None)
+                    if removed:
+                        all_removed[key] = removed
+                        logger.debug("Removed %s from environment before request", key)
+            
+            # Also check for any other environment variables that might contain non-ASCII
+            problematic_vars = {}
+            for key, value in list(os.environ.items()):
+                if isinstance(value, str):
+                    try:
+                        value.encode('ascii')
+                    except UnicodeEncodeError:
+                        if key not in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+                            problematic_vars[key] = os.environ.pop(key, None)
+                            logger.warning("Removed problematic environment variable %s (contains non-ASCII)", key)
+            
+            try:
+                request_headers = {
+                    **self._http_headers,
+                    "Range-Unit": "items",
+                    "Prefer": "return=representation",
+                }
+                
+                # Ensure all header values are ASCII-safe
+                safe_headers = {}
+                for k, v in request_headers.items():
+                    if isinstance(v, str):
+                        try:
+                            v.encode('ascii')
+                            safe_headers[k] = v
+                        except UnicodeEncodeError:
+                            logger.warning("Skipping header %s with non-ASCII value", k)
+                    else:
+                        safe_headers[k] = v
+                
+                # Always ensure apikey and Authorization headers are present
+                if 'apikey' not in safe_headers:
+                    safe_headers['apikey'] = self._supabase_key
+                if 'Authorization' not in safe_headers:
+                    safe_headers['Authorization'] = f"Bearer {self._supabase_key}"
+                
+                full_url = f"{self._http_base_url}{url}"
+                logger.debug("Making GET request to: %s", full_url)
+                
+                # Use httpx with explicit headers to avoid encoding issues
+                with httpx.Client(timeout=self._http_timeout, verify=True) as client:
+                    response = client.get(full_url, headers=safe_headers)
+                    
+                    if response.status_code >= 400:
+                        error_msg = f"HTTP {response.status_code}: {response.text[:500]}"
+                        logger.error("HTTP error when fetching vehicles: %s. Returning empty list.", error_msg)
+                        return []
+                    
+                    # Parse JSON response
+                    data = response.json()
+                    if isinstance(data, list):
+                        logger.debug("Fetched %d vehicle records", len(data))
+                        return data
+                    else:
+                        logger.warning("Response data is not a list: %s", type(data))
+                        return []
+            except UnicodeEncodeError as e:
+                logger.error(
+                    "UnicodeEncodeError when fetching vehicles: %s. "
+                    "This may be caused by non-ASCII characters in environment variables. "
+                    "Returning empty result.",
+                    e,
+                    exc_info=True,
+                )
+                return []
+            except Exception as e:
+                logger.error(
+                    "Error when fetching vehicles: %s. Returning empty result.",
+                    e,
+                    exc_info=True,
+                )
+                return []
+            finally:
+                # Never restore removed variables
+                if all_removed or problematic_vars:
+                    logger.debug(
+                        "Removed %d SUPABASE_* variables and %d problematic variables before request, will not be restored",
+                        len(all_removed),
+                        len(problematic_vars)
+                    )
+        except Exception as e:
             logger.error(
-                "UnicodeEncodeError when fetching vehicles: %s. "
-                "This may be caused by non-ASCII characters in Supabase configuration. "
-                "Returning empty result.",
+                "Error when fetching vehicles: %s. Returning empty result.",
                 e,
+                exc_info=True,
             )
             return []
 
