@@ -447,6 +447,26 @@ class SupabaseService:
                             non_ascii_chars,
                             [i for i, c in enumerate(apikey_value) if ord(c) > 127]
                         )
+                    
+                    # Decode JWT to check role (for debugging)
+                    try:
+                        import base64
+                        parts = apikey_value.split('.')
+                        if len(parts) >= 2:
+                            payload = parts[1]
+                            payload += '=' * (4 - len(payload) % 4)
+                            decoded = base64.urlsafe_b64decode(payload)
+                            import json
+                            payload_json = json.loads(decoded)
+                            role = payload_json.get('role', 'unknown')
+                            logger.info("JWT role in apikey: %s", role)
+                            if role == 'anon':
+                                logger.warning(
+                                    "Using ANON key - this may have limited permissions. "
+                                    "Consider using SERVICE_ROLE key from Supabase Dashboard."
+                                )
+                    except Exception:
+                        pass  # Don't fail if JWT decode fails
                 
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
