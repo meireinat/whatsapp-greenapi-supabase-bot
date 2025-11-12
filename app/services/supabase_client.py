@@ -334,19 +334,20 @@ class SupabaseService:
                     else:
                         safe_headers[k] = v
                 
+                # Always ensure apikey and Authorization headers are present
+                # Use the cleaned key that was prepared in __init__
+                if 'apikey' not in safe_headers:
+                    logger.warning("apikey header missing, adding with cleaned key")
+                    safe_headers['apikey'] = self._supabase_key
+                if 'Authorization' not in safe_headers:
+                    logger.warning("Authorization header missing, adding with cleaned key")
+                    safe_headers['Authorization'] = f"Bearer {self._supabase_key}"
+                
                 # Log what headers we're actually sending
                 logger.info("Sending headers: %s", list(safe_headers.keys()))
-                if 'apikey' not in safe_headers or 'Authorization' not in safe_headers:
-                    logger.error("CRITICAL: Missing required headers! apikey: %s, Authorization: %s", 
-                               'apikey' in safe_headers, 'Authorization' in safe_headers)
-                    # Try to add them anyway with the cleaned key
-                    if 'apikey' not in safe_headers:
-                        logger.warning("Adding apikey header with cleaned key")
-                        safe_headers['apikey'] = self._supabase_key
-                    if 'Authorization' not in safe_headers:
-                        logger.warning("Adding Authorization header with cleaned key")
-                        safe_headers['Authorization'] = f"Bearer {self._supabase_key}"
-                    logger.info("Headers after fix: %s", list(safe_headers.keys()))
+                logger.debug("apikey header length: %d, Authorization header length: %d", 
+                           len(safe_headers.get('apikey', '')), 
+                           len(safe_headers.get('Authorization', '')))
                 
                 full_url = f"{self._http_base_url}{url}"
                 logger.info("Making GET request to: %s", full_url)
