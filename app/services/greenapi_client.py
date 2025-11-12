@@ -45,14 +45,23 @@ class GreenAPIClient:
             "message": text,
         }
 
-        logger.debug("Sending message to chat %s via Green API", chat_id)
-        response = await self._client.post(endpoint, json=payload)
+        logger.info("Sending message to chat %s via Green API endpoint: %s", chat_id, endpoint)
+        logger.debug("Message payload: %s", payload)
         try:
+            response = await self._client.post(endpoint, json=payload)
             response.raise_for_status()
+            result = response.json()
+            logger.info("Message sent successfully to chat %s. Response: %s", chat_id, result)
+            return result
         except httpx.HTTPStatusError as exc:
-            logger.exception("Failed to send WhatsApp message: %s", exc)
+            logger.error(
+                "Failed to send WhatsApp message to %s: HTTP %s - %s",
+                chat_id,
+                exc.response.status_code if exc.response else "unknown",
+                exc.response.text if exc.response else str(exc),
+            )
             raise
-
-        logger.info("Message sent to chat %s", chat_id)
-        return response.json()
+        except Exception as exc:
+            logger.exception("Unexpected error sending message to %s: %s", chat_id, exc)
+            raise
 

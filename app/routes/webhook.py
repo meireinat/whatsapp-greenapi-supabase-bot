@@ -117,6 +117,7 @@ async def handle_webhook(
 
     logger.info("Received message from %s: %s", chat_id, incoming_text)
     intent: IntentResult | None = intent_engine.match(incoming_text)
+    logger.info("Intent matched: %s (parameters: %s)", intent.name if intent else "None", intent.parameters if intent else "None")
 
     if not intent:
         if gemini_service:
@@ -171,6 +172,7 @@ async def handle_webhook(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Intent not implemented"
         )
 
+    logger.info("Sending response to %s: %s", chat_id, response_text[:100])
     background_tasks.add_task(green_api_client.send_text_message, chat_id, response_text)
     supabase_service.log_query(
         user_phone=chat_id,
