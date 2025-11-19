@@ -28,6 +28,7 @@ from app.services.response_builder import (
 from app.services.supabase_client import SupabaseService
 from app.services.gemini_client import GeminiService
 from app.services.greenapi_client import GreenAPIClient, GreenAPIQuotaExceededError
+from app.services.hazard_knowledge import HazardKnowledgeBase
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,12 @@ def get_gemini_service() -> GeminiService | None:
     return app.state.gemini_service
 
 
+def get_hazard_knowledge() -> HazardKnowledgeBase | None:
+    from app.main import app
+
+    return getattr(app.state, "hazard_knowledge", None)
+
+
 def get_webhook_token() -> str | None:
     from app.main import app
 
@@ -108,6 +115,7 @@ async def handle_webhook(
     supabase_service: SupabaseService = Depends(get_supabase_service),
     green_api_client: GreenAPIClient = Depends(get_green_api_client),
     gemini_service: GeminiService | None = Depends(get_gemini_service),
+    hazard_knowledge: HazardKnowledgeBase | None = Depends(get_hazard_knowledge),
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Depends(get_webhook_token),
 ) -> Response:
@@ -157,6 +165,11 @@ async def handle_webhook(
     logger.info("Received message from %s: %s", chat_id, incoming_text)
     intent: IntentResult | None = intent_engine.match(incoming_text)
     logger.info("Intent matched: %s (parameters: %s)", intent.name if intent else "None", intent.parameters if intent else "None")
+    hazard_sections = (
+        hazard_knowledge.build_sections(incoming_text)
+        if hazard_knowledge and hazard_knowledge.is_available()
+        else None
+    )
 
     if not intent:
         logger.info("No intent matched, using Gemini or fallback")
@@ -165,7 +178,9 @@ async def handle_webhook(
             metrics = supabase_service.get_metrics_summary()
             logger.info("Metrics fetched, calling Gemini with question: %s", incoming_text)
             response_text = await gemini_service.answer_question(
-                question=incoming_text, metrics=metrics
+                question=incoming_text,
+                metrics=metrics,
+                knowledge_sections=hazard_sections,
             )
             logger.info("Gemini response: %s", response_text[:200] if response_text else "None")
             if not response_text:
@@ -237,6 +252,7 @@ async def handle_webhook(
             response_text = await gemini_service.answer_question(
                 question=incoming_text,
                 metrics=metrics,
+                knowledge_sections=hazard_sections,
             )
             if not response_text:
                 response_text = build_fallback_response()

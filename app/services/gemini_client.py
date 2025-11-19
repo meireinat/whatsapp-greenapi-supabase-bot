@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from google import genai
 from google.genai import types
@@ -34,6 +34,7 @@ class GeminiService:
         metrics: Mapping[str, Any],
         system_instruction: str | None = None,
         thinking_budget: int = 0,
+        knowledge_sections: Sequence[Mapping[str, str]] | None = None,
     ) -> str:
         """
         Generate a response using Gemini with the provided metrics context.
@@ -52,7 +53,11 @@ class GeminiService:
                 ),
                 temperature=0.3,
             )
-            prompt = self._build_prompt(question=question, metrics=metrics)
+            prompt = self._build_prompt(
+                question=question,
+                metrics=metrics,
+                knowledge_sections=knowledge_sections,
+            )
             response = self._client.models.generate_content(
                 model=self._model,
                 contents=prompt,
@@ -63,12 +68,30 @@ class GeminiService:
         return await asyncio.to_thread(_call)
 
     @staticmethod
-    def _build_prompt(*, question: str, metrics: Mapping[str, Any]) -> str:
+    def _build_prompt(
+        *,
+        question: str,
+        metrics: Mapping[str, Any],
+        knowledge_sections: Sequence[Mapping[str, str]] | None = None,
+    ) -> str:
         context = json.dumps(metrics, ensure_ascii=False, indent=2)
-        return (
-            "Contextual data (JSON):\n"
-            f"{context}\n\n"
-            "Using only the context above, answer the following question:\n"
-            f"{question}"
-        )
+        parts = [
+            "Contextual data (JSON):",
+            context,
+        ]
+        if knowledge_sections:
+            parts.append("Hazard document excerpts:")
+            for index, section in enumerate(knowledge_sections, start=1):
+                title = section.get("document_title") or section.get("document_id") or f"Section {index}"
+                source = section.get("source_file", "hazard_document.pdf")
+                excerpt = section.get("excerpt", "").strip()
+                identifier = section.get("section_id", f"{index}")
+                if not excerpt:
+                    continue
+                parts.append(
+                    f"[{index}] {title} ({source}, id={identifier}):\n{excerpt}"
+                )
+        parts.append("Using only the context above, answer the following question:")
+        parts.append(question)
+        return "\n\n".join(parts)
 

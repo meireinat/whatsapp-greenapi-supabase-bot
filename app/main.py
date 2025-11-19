@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.routes import webhook
 from app.services.gemini_client import GeminiService
+from app.services.hazard_knowledge import HazardKnowledgeBase
 from app.services.greenapi_client import GreenAPIClient
 from app.services.intent_engine import IntentEngine
 from app.services.supabase_client import SupabaseService
@@ -41,6 +42,7 @@ async def lifespan(application: FastAPI):
         api_token=settings.green_api_token,
     )
     application.state.green_webhook_token = settings.green_api_webhook_token
+    application.state.hazard_knowledge = HazardKnowledgeBase()
     if settings.gemini_api_key:
         application.state.gemini_service = GeminiService(
             api_key=settings.gemini_api_key,
