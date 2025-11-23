@@ -36,16 +36,25 @@ router = APIRouter(prefix="/api/green", tags=["green-api"])
 
 
 async def send_message_with_error_handling(
-    client: GreenAPIClient, chat_id: str, message: str
+    client: GreenAPIClient, chat_id: str, message: str, 
+    supabase_service: SupabaseService | None = None,
+    user_text: str | None = None,
+    intent: str | None = None,
+    intent_params: dict | None = None,
 ) -> None:
     """
     Send a message via Green API with proper error handling.
     Logs quota exceeded errors but doesn't crash the webhook.
+    Also logs the query to Supabase even if sending fails.
     """
+    send_success = False
+    error_type = None
     try:
         await client.send_text_message(chat_id, message)
         logger.info("Message sent successfully to %s", chat_id)
+        send_success = True
     except GreenAPIQuotaExceededError as e:
+        error_type = "quota_exceeded"
         logger.error(
             "Failed to send message to %s: Green API quota exceeded. "
             "User will not receive response. Error: %s",
@@ -55,6 +64,7 @@ async def send_message_with_error_handling(
         # Don't re-raise - allow webhook to complete
         # The user won't get a response, but at least we logged it
     except Exception as e:
+        error_type = "send_error"
         logger.error(
             "Failed to send message to %s: %s",
             chat_id,
@@ -62,6 +72,28 @@ async def send_message_with_error_handling(
             exc_info=True,
         )
         # Don't re-raise - allow webhook to complete
+    
+    # Log to Supabase even if sending failed (for analytics)
+    if supabase_service and user_text:
+        try:
+            # Append error info to response if sending failed
+            response_text = message
+            if not send_success:
+                if error_type == "quota_exceeded":
+                    response_text = f"{message}\n\n[⚠️ הודעה לא נשלחה: מגבלת quota חודשי הושגה]"
+                else:
+                    response_text = f"{message}\n\n[⚠️ שגיאה בשליחת הודעה]"
+            
+            supabase_service.log_query(
+                user_phone=chat_id,
+                user_text=user_text,
+                intent=intent or "unknown",
+                parameters=intent_params or {},
+                response_text=response_text,
+            )
+            logger.info("Query logged to Supabase for %s (send_success=%s)", chat_id, send_success)
+        except Exception as e:
+            logger.error("Failed to log query to Supabase: %s", e, exc_info=True)
 
 
 def get_intent_engine() -> IntentEngine:
@@ -193,6 +225,10 @@ async def handle_webhook(
             green_api_client,
             chat_id,
             response_text,
+            supabase_service,
+            incoming_text,
+            None,
+            {},
         )
         return Response(status_code=status.HTTP_202_ACCEPTED)
 
@@ -265,26 +301,18 @@ async def handle_webhook(
     logger.info("Chat ID: %s, Response length: %d chars", chat_id, len(response_text))
     logger.info("Response preview: %s", response_text[:150])
     
-    # Queue message with proper error handling
+    # Queue message with proper error handling (logging happens inside the function)
     background_tasks.add_task(
         send_message_with_error_handling,
         green_api_client,
         chat_id,
         response_text,
+        supabase_service,
+        incoming_text,
+        intent.name,
+        dict(intent.parameters),
     )
     logger.info("Message queued for sending to %s", chat_id)
-    
-    try:
-        supabase_service.log_query(
-            user_phone=chat_id,
-            user_text=incoming_text,
-            intent=intent.name,
-            parameters=dict(intent.parameters),
-            response_text=response_text,
-        )
-        logger.info("Query logged to Supabase")
-    except Exception as e:
-        logger.error("Failed to log query: %s", e, exc_info=True)
     
     logger.info("=== WEBHOOK PROCESSING COMPLETE ===")
     return Response(status_code=status.HTTP_202_ACCEPTED)
