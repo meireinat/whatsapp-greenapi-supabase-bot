@@ -50,6 +50,25 @@ class IntentEngine:
     )
 
     MONTHLY_CONTAINER_PATTERNS = (
+        # Support with verbs FIRST (more specific): "כמה מכולות נפרקו בפברואר 25"
+        # This handles "ב" directly attached to month name: "בפברואר" as one word
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+ב(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+ב(?P<month_name>\S+)",
+            re.IGNORECASE,
+        ),
+        # Support with verbs and space: "כמה מכולות נפרקו ב פברואר 25"
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)",
+            re.IGNORECASE,
+        ),
         # Hebrew: "כמה מכולות בינואר 2024" or "כמה מכולות בחודש ינואר 2024"
         # Use \S+ to match any non-whitespace characters (including Hebrew)
         re.compile(
@@ -67,24 +86,6 @@ class IntentEngine:
         ),
         re.compile(
             r"\bכמה\b.*\bמכולות\b.*?ב(?P<month_name>\S+)",
-            re.IGNORECASE,
-        ),
-        # Support with verbs: "כמה מכולות נפרקו בפבאור 25" (ב-פבאור as one word or separate)
-        re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
-            re.IGNORECASE,
-        ),
-        re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)",
-            re.IGNORECASE,
-        ),
-        # Support "ב" directly attached to month name: "כמה מכולות נפרקו בפבאור 25"
-        re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+ב(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
-            re.IGNORECASE,
-        ),
-        re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+ב(?P<month_name>\S+)",
             re.IGNORECASE,
         ),
         # English month names
