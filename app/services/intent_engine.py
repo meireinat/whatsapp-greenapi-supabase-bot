@@ -69,6 +69,24 @@ class IntentEngine:
             r"\bכמה\b.*\bמכולות\b.*?ב(?P<month_name>\S+)",
             re.IGNORECASE,
         ),
+        # Support with verbs: "כמה מכולות נפרקו בפבאור 25" (ב-פבאור as one word or separate)
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)",
+            re.IGNORECASE,
+        ),
+        # Support "ב" directly attached to month name: "כמה מכולות נפרקו בפבאור 25"
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+ב(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+ב(?P<month_name>\S+)",
+            re.IGNORECASE,
+        ),
         # English month names
         re.compile(
             r"\bכמה\b.*\bמכולות\b.*?(?:ב|בחודש)\s*(?P<month_name>\w+)\s+(?P<year>\d{2,4})",
@@ -219,9 +237,18 @@ class IntentEngine:
     def _parse_month(groups: Mapping[str, str]) -> dict[str, int] | None:
         """Parse month name and year from Hebrew or English."""
         month_names_he = {
-            "ינואר": 1, "פברואר": 2, "מרץ": 3, "מרס": 3, "מארס": 3,
-            "אפריל": 4, "מאי": 5, "יוני": 6, "יולי": 7, "אוגוסט": 8,
-            "ספטמבר": 9, "אוקטובר": 10, "נובמבר": 11, "דצמבר": 12,
+            "ינואר": 1, 
+            "פברואר": 2, "פבאור": 2, "פבואר": 2, "פברואר": 2,  # Common variations
+            "מרץ": 3, "מרס": 3, "מארס": 3, "מרץ": 3,
+            "אפריל": 4, 
+            "מאי": 5, 
+            "יוני": 6, 
+            "יולי": 7, 
+            "אוגוסט": 8,
+            "ספטמבר": 9, 
+            "אוקטובר": 10, 
+            "נובמבר": 11, 
+            "דצמבר": 12,
         }
         month_names_en = {
             "january": 1, "february": 2, "march": 3, "april": 4,
