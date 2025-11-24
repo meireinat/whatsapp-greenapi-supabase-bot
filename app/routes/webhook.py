@@ -205,6 +205,16 @@ async def handle_webhook(
     logger.info("Received message from %s: %s", chat_id, incoming_text)
     intent: IntentResult | None = intent_engine.match(incoming_text)
     logger.info("Intent matched: %s (parameters: %s)", intent.name if intent else "None", intent.parameters if intent else "None")
+    
+    # Get conversation history for context
+    conversation_history = supabase_service.get_recent_user_queries(
+        user_phone=chat_id,
+        limit=5,
+        exclude_current=True,
+    )
+    if conversation_history:
+        logger.info("Retrieved %d previous queries for context", len(conversation_history))
+    
     hazard_sections = (
         hazard_knowledge.build_sections(incoming_text)
         if hazard_knowledge and hazard_knowledge.is_available()
@@ -231,6 +241,7 @@ async def handle_webhook(
                 question=incoming_text,
                 metrics=metrics,
                 knowledge_sections=hazard_sections,
+                conversation_history=conversation_history,
             )
             logger.info("Council response: %s", response_text[:200] if response_text else "None")
             if not response_text:
@@ -243,6 +254,7 @@ async def handle_webhook(
                 question=incoming_text,
                 metrics=metrics,
                 knowledge_sections=hazard_sections,
+                conversation_history=conversation_history,
             )
             logger.info("Gemini response: %s", response_text[:200] if response_text else "None")
             if not response_text:
@@ -302,12 +314,14 @@ async def handle_webhook(
                     question=incoming_text,
                     metrics=metrics,
                     knowledge_sections=hazard_sections,
+                    conversation_history=conversation_history,
                 )
             else:
                 llm_response = await gemini_service.answer_question(
                     question=incoming_text,
                     metrics=metrics,
                     knowledge_sections=hazard_sections,
+                    conversation_history=conversation_history,
                 )
             
             if llm_response and "לא מצאתי" not in llm_response and "חסר" not in llm_response.lower():
@@ -354,12 +368,14 @@ async def handle_webhook(
                 question=incoming_text,
                 metrics=metrics,
                 knowledge_sections=hazard_sections,
+                conversation_history=conversation_history,
             )
         elif gemini_service:
             response_text = await gemini_service.answer_question(
                 question=incoming_text,
                 metrics=metrics,
                 knowledge_sections=hazard_sections,
+                conversation_history=conversation_history,
             )
         else:
             response_text = build_fallback_response()

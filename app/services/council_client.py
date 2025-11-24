@@ -45,6 +45,7 @@ class CouncilService:
         metrics: Mapping[str, Any],
         system_instruction: str | None = None,
         knowledge_sections: Sequence[Mapping[str, str]] | None = None,
+        conversation_history: Sequence[Mapping[str, Any]] | None = None,
     ) -> str:
         """
         Generate a response using LLM Council with the provided metrics context.
@@ -55,6 +56,7 @@ class CouncilService:
             question=question,
             metrics=metrics,
             knowledge_sections=knowledge_sections,
+            conversation_history=conversation_history,
         )
 
         # Build system instruction
@@ -326,6 +328,7 @@ Provide a clear, well-reasoned final answer in Hebrew that represents the counci
         question: str,
         metrics: Mapping[str, Any],
         knowledge_sections: Sequence[Mapping[str, str]] | None = None,
+        conversation_history: Sequence[Mapping[str, Any]] | None = None,
     ) -> str:
         """Build the prompt with context and metrics."""
         context = json.dumps(metrics, ensure_ascii=False, indent=2)
@@ -333,6 +336,22 @@ Provide a clear, well-reasoned final answer in Hebrew that represents the counci
             "Contextual data (JSON):",
             context,
         ]
+        
+        # Add conversation history if available
+        if conversation_history:
+            parts.append("\nPrevious conversation context:")
+            for idx, hist_item in enumerate(conversation_history, start=1):
+                user_q = hist_item.get("user_text", "")
+                bot_a = hist_item.get("response_text", "")
+                if user_q or bot_a:
+                    parts.append(f"\n[Previous exchange {idx}]:")
+                    if user_q:
+                        parts.append(f"User: {user_q}")
+                    if bot_a:
+                        # Truncate long responses to avoid token limits
+                        truncated = bot_a[:200] + "..." if len(bot_a) > 200 else bot_a
+                        parts.append(f"Bot: {truncated}")
+            parts.append("\n---")
         if knowledge_sections:
             parts.append("Hazard document excerpts:")
             for index, section in enumerate(knowledge_sections, start=1):

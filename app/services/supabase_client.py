@@ -967,6 +967,70 @@ class SupabaseService:
             )
             return []
 
+    def get_recent_user_queries(
+        self,
+        *,
+        user_phone: str,
+        limit: int = 5,
+        exclude_current: bool = True,
+    ) -> list[dict[str, Any]]:
+        """
+        Get recent queries from a specific user for context.
+        
+        Args:
+            user_phone: Phone number of the user
+            limit: Maximum number of recent queries to return (default: 5)
+            exclude_current: If True, excludes the most recent query (default: True)
+        
+        Returns:
+            List of recent queries with user_text, response_text, intent, and created_at
+        """
+        try:
+            # Use direct HTTP request to avoid Supabase client issues
+            url = f"{self._supabase_url}/rest/v1/bot_queries_log"
+            headers = {
+                "apikey": self._supabase_key,
+                "Authorization": f"Bearer {self._supabase_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation",
+            }
+            
+            params = {
+                "user_phone": f"eq.{user_phone}",
+                "order": "created_at.desc",
+                "limit": str(limit + (1 if exclude_current else 0)),
+                "select": "user_text,response_text,intent,parameters,created_at",
+            }
+            
+            response = httpx.get(url, headers=headers, params=params, timeout=self._http_timeout)
+            response.raise_for_status()
+            
+            queries = response.json()
+            
+            # Exclude the most recent query if requested (it's the current one being processed)
+            if exclude_current and queries:
+                queries = queries[1:]
+            
+            # Reverse to get chronological order (oldest first)
+            queries.reverse()
+            
+            logger.debug(
+                "Retrieved %d recent queries for user %s",
+                len(queries),
+                user_phone,
+            )
+            
+            return queries
+            
+        except Exception as e:
+            logger.error(
+                "Failed to get recent user queries for %s: %s",
+                user_phone,
+                e,
+                exc_info=True,
+            )
+            return []
+
     def log_query(
         self,
         *,

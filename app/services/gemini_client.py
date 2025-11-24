@@ -35,6 +35,7 @@ class GeminiService:
         system_instruction: str | None = None,
         thinking_budget: int = 0,
         knowledge_sections: Sequence[Mapping[str, str]] | None = None,
+        conversation_history: Sequence[Mapping[str, Any]] | None = None,
     ) -> str:
         """
         Generate a response using Gemini with the provided metrics context.
@@ -74,6 +75,7 @@ class GeminiService:
                 question=question,
                 metrics=metrics,
                 knowledge_sections=knowledge_sections,
+                conversation_history=conversation_history,
             )
             response = self._client.models.generate_content(
                 model=self._model,
@@ -90,12 +92,29 @@ class GeminiService:
         question: str,
         metrics: Mapping[str, Any],
         knowledge_sections: Sequence[Mapping[str, str]] | None = None,
+        conversation_history: Sequence[Mapping[str, Any]] | None = None,
     ) -> str:
         context = json.dumps(metrics, ensure_ascii=False, indent=2)
         parts = [
             "Contextual data (JSON):",
             context,
         ]
+        
+        # Add conversation history if available
+        if conversation_history:
+            parts.append("\nPrevious conversation context:")
+            for idx, hist_item in enumerate(conversation_history, start=1):
+                user_q = hist_item.get("user_text", "")
+                bot_a = hist_item.get("response_text", "")
+                if user_q or bot_a:
+                    parts.append(f"\n[Previous exchange {idx}]:")
+                    if user_q:
+                        parts.append(f"User: {user_q}")
+                    if bot_a:
+                        # Truncate long responses to avoid token limits
+                        truncated = bot_a[:200] + "..." if len(bot_a) > 200 else bot_a
+                        parts.append(f"Bot: {truncated}")
+            parts.append("\n---")
         if knowledge_sections:
             parts.append("Hazard document excerpts:")
             for index, section in enumerate(knowledge_sections, start=1):
