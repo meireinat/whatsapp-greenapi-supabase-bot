@@ -207,14 +207,15 @@ async def handle_webhook(
         logger.info("No intent matched, using Gemini or fallback")
         if gemini_service:
             logger.info("Gemini service available, fetching metrics...")
-            # Fetch extended metrics (last 2 years) to give Gemini more context for date queries
+            # Fetch extended metrics (last 5 years) to give Gemini more context for date queries
+            # This covers queries like "ינואר 2023" which might be outside the default 30-day window
             import datetime as dt
             end_date = dt.date.today()
-            start_date = end_date - dt.timedelta(days=730)  # 2 years of data
+            start_date = dt.date(end_date.year - 5, 1, 1)  # 5 years back from today
             metrics = supabase_service.get_metrics_summary(
                 start_date=start_date,
                 end_date=end_date,
-                max_rows=5000,  # More rows for better coverage
+                max_rows=10000,  # More rows for better coverage of historical data
             )
             logger.info("Metrics fetched (period: %s to %s), calling Gemini with question: %s", 
                        start_date.isoformat(), end_date.isoformat(), incoming_text)
@@ -261,7 +262,33 @@ async def handle_webhook(
         logger.info("Fetching monthly containers: month=%d, year=%d", month, year)
         count = supabase_service.get_containers_count_monthly(month, year)
         logger.info("Monthly containers count result: %d", count)
-        response_text = build_monthly_containers_response(count, month, year)
+        
+        # If count is 0 and Gemini is available, double-check with Gemini
+        # (might be missing data or wrong date interpretation)
+        if count == 0 and gemini_service:
+            logger.info("Count is 0, verifying with Gemini for month=%d, year=%d", month, year)
+            import datetime as dt
+            # Fetch extended metrics for the specific year
+            start_date = dt.date(year, 1, 1)
+            end_date = dt.date(year, 12, 31)
+            metrics = supabase_service.get_metrics_summary(
+                start_date=start_date,
+                end_date=end_date,
+                max_rows=10000,
+            )
+            gemini_response = await gemini_service.answer_question(
+                question=incoming_text,
+                metrics=metrics,
+                knowledge_sections=hazard_sections,
+            )
+            if gemini_response and "לא מצאתי" not in gemini_response and "חסר" not in gemini_response.lower():
+                logger.info("Gemini found data, using Gemini response")
+                response_text = gemini_response
+            else:
+                logger.info("Gemini also found no data, using 0 count")
+                response_text = build_monthly_containers_response(count, month, year)
+        else:
+            response_text = build_monthly_containers_response(count, month, year)
     elif intent.name == "containers_count_comparison":
         month1 = intent.parameters["month1"]
         year1 = intent.parameters["year1"]
