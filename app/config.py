@@ -25,6 +25,7 @@ class Settings(BaseModel):
     supabase_schema: Optional[str] = None
     bot_display_name: str = "Operations Bot"
     gemini_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
 
 
 @lru_cache
@@ -51,6 +52,7 @@ def get_settings() -> Settings:
             supabase_schema=_safe_schema_env(credentials),
             bot_display_name=os.getenv("BOT_DISPLAY_NAME", "Operations Bot"),
             gemini_api_key=_optional_env("GEMINI_API_KEY", credentials),
+            openrouter_api_key=_optional_env("OPENROUTER_API_KEY", credentials),
         )
     except (ValidationError, KeyError) as exc:
         missing = ", ".join(sorted(_missing_keys()))
@@ -103,6 +105,7 @@ def _optional_env(name: str, credentials: dict[str, str] | None = None) -> Optio
     key_map = {
         "GEMINI_API_KEY": "gemini_api_key",
         "GREEN_API_WEBHOOK_TOKEN": "green_api_webhook_token",
+        "OPENROUTER_API_KEY": "openrouter_api_key",
     }
     return os.getenv(name) or credentials.get(key_map.get(name, name.lower()))
 

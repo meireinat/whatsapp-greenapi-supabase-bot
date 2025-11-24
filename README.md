@@ -26,6 +26,13 @@ supabase db execute --file sql/create_ramp_operations_table.sql
 Update `.env` with real credentials.
 If you plan to use Gemini analysis, set `GEMINI_API_KEY` (either in `.env` or `config/supabase_credentials.json`).
 
+For multi-model responses with ranking (LLM Council), set `OPENROUTER_API_KEY`:
+1. Sign up at [openrouter.ai](https://openrouter.ai)
+2. Go to [keys.openrouter.ai](https://keys.openrouter.ai) and create a new API key
+3. Copy the key (starts with `sk-or-v1-...`)
+4. Add it to `.env` as `OPENROUTER_API_KEY=sk-or-v1-...` or to `config/supabase_credentials.json` as `"openrouter_api_key": "sk-or-v1-..."`
+5. Note: OpenRouter uses pay-as-you-go pricing. Set up billing limits in your OpenRouter dashboard.
+
 ## Running Locally
 
 ```bash
@@ -42,6 +49,7 @@ Expose the local server (e.g., via ngrok) and configure the Green API webhook UR
 - `app/services/supabase_client.py`: Supabase data access layer.
 - `app/services/greenapi_client.py`: Outgoing WhatsApp messages through Green API.
 - `app/services/gemini_client.py`: Bridges Supabase metrics to Google Gemini for AI-driven answers.
+- `app/services/council_client.py`: Multi-model LLM Council system that queries multiple models, ranks responses, and synthesizes a final answer.
 - `app/services/response_builder.py`: Formats textual replies.
 
 The implementation aligns with the specification documents stored in `whatsapp-bot-python-greenapi-supabase-md/`.
@@ -71,7 +79,7 @@ Alternatively, run the contents of `sql/create_containers_table.sql` via the Sup
    - `GREEN_API_TOKEN`
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - Optional: `GREEN_API_WEBHOOK_TOKEN`, `SUPABASE_SCHEMA`, `BOT_DISPLAY_NAME`, `GEMINI_API_KEY`
+   - Optional: `GREEN_API_WEBHOOK_TOKEN`, `SUPABASE_SCHEMA`, `BOT_DISPLAY_NAME`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`
 4. Railway uses Nixpacks or Docker automatically. ה-start command מוגדר בקובץ `railway.json` כ־
    ```
    sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
@@ -105,7 +113,9 @@ Add `--dry-run` to preview without sending. The script reads credentials from `.
 - Daily containers: “כמה מכולות היום?”
 - Container range: “כמה מכולות נפרקו מתאריך 01/01/2023 עד תאריך 31/01/2023?”
 - Vehicle range: “כמה רכבים היו בין 01/01/2023 ל-15/01/2023?”
-- Free-form analysis (requires `GEMINI_API_KEY`): “נתח באמצעות גמיני את תפוקת המכולות בחודש האחרון.”
+- Free-form analysis (requires `GEMINI_API_KEY` or `OPENROUTER_API_KEY`): “נתח באמצעות גמיני את תפוקת המכולות בחודש האחרון.”
+  
+The bot prefers LLM Council (multi-model with ranking) if `OPENROUTER_API_KEY` is set, otherwise falls back to Gemini if `GEMINI_API_KEY` is available.
 
 All date expressions should use `dd/mm/yyyy` (or `dd-mm-yyyy`) format.
 

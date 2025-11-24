@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.routes import webhook
 from app.services.gemini_client import GeminiService
+from app.services.council_client import CouncilService
 from app.services.hazard_knowledge import HazardKnowledgeBase
 from app.services.greenapi_client import GreenAPIClient
 from app.services.intent_engine import IntentEngine
@@ -49,6 +50,16 @@ async def lifespan(application: FastAPI):
         )
     else:
         application.state.gemini_service = None
+    
+    # Initialize Council Service (preferred over Gemini for multi-model responses)
+    if settings.openrouter_api_key:
+        application.state.council_service = CouncilService(
+            api_key=settings.openrouter_api_key,
+        )
+        logger.info("Council service initialized with OpenRouter API")
+    else:
+        application.state.council_service = None
+        logger.info("Council service not available (OPENROUTER_API_KEY not set)")
 
     try:
         yield

@@ -27,6 +27,7 @@ from app.services.response_builder import (
 )
 from app.services.supabase_client import SupabaseService
 from app.services.gemini_client import GeminiService
+from app.services.council_client import CouncilService
 from app.services.greenapi_client import GreenAPIClient, GreenAPIQuotaExceededError
 from app.services.hazard_knowledge import HazardKnowledgeBase
 
@@ -123,6 +124,12 @@ def get_gemini_service() -> GeminiService | None:
     return app.state.gemini_service
 
 
+def get_council_service() -> CouncilService | None:
+    from app.main import app
+
+    return getattr(app.state, "council_service", None)
+
+
 def get_hazard_knowledge() -> HazardKnowledgeBase | None:
     from app.main import app
 
@@ -147,6 +154,7 @@ async def handle_webhook(
     supabase_service: SupabaseService = Depends(get_supabase_service),
     green_api_client: GreenAPIClient = Depends(get_green_api_client),
     gemini_service: GeminiService | None = Depends(get_gemini_service),
+    council_service: CouncilService | None = Depends(get_council_service),
     hazard_knowledge: HazardKnowledgeBase | None = Depends(get_hazard_knowledge),
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Depends(get_webhook_token),
@@ -204,19 +212,31 @@ async def handle_webhook(
     )
 
     if not intent:
-        logger.info("No intent matched, using Gemini or fallback")
-        if gemini_service:
-            logger.info("Gemini service available, fetching metrics...")
-            # Fetch extended metrics (last 5 years) to give Gemini more context for date queries
-            # This covers queries like "ינואר 2023" which might be outside the default 30-day window
-            import datetime as dt
-            end_date = dt.date.today()
-            start_date = dt.date(end_date.year - 5, 1, 1)  # 5 years back from today
-            metrics = supabase_service.get_metrics_summary(
-                start_date=start_date,
-                end_date=end_date,
-                max_rows=10000,  # More rows for better coverage of historical data
+        logger.info("No intent matched, using Council/Gemini or fallback")
+        # Prefer Council service (multi-model with ranking) over Gemini
+        import datetime as dt
+        end_date = dt.date.today()
+        start_date = dt.date(end_date.year - 5, 1, 1)  # 5 years back from today
+        metrics = supabase_service.get_metrics_summary(
+            start_date=start_date,
+            end_date=end_date,
+            max_rows=10000,  # More rows for better coverage of historical data
+        )
+        
+        if council_service:
+            logger.info("Council service available, fetching metrics and using multi-model approach...")
+            logger.info("Metrics fetched (period: %s to %s), calling Council with question: %s", 
+                       start_date.isoformat(), end_date.isoformat(), incoming_text)
+            response_text = await council_service.answer_question(
+                question=incoming_text,
+                metrics=metrics,
+                knowledge_sections=hazard_sections,
             )
+            logger.info("Council response: %s", response_text[:200] if response_text else "None")
+            if not response_text:
+                response_text = build_fallback_response()
+        elif gemini_service:
+            logger.info("Council service not available, using Gemini service...")
             logger.info("Metrics fetched (period: %s to %s), calling Gemini with question: %s", 
                        start_date.isoformat(), end_date.isoformat(), incoming_text)
             response_text = await gemini_service.answer_question(
@@ -228,7 +248,7 @@ async def handle_webhook(
             if not response_text:
                 response_text = build_fallback_response()
         else:
-            logger.info("Gemini service not available, using fallback")
+            logger.info("Neither Council nor Gemini service available, using fallback")
             response_text = build_fallback_response()
         background_tasks.add_task(
             send_message_with_error_handling,
@@ -263,10 +283,9 @@ async def handle_webhook(
         count = supabase_service.get_containers_count_monthly(month, year)
         logger.info("Monthly containers count result: %d", count)
         
-        # If count is 0 and Gemini is available, double-check with Gemini
-        # (might be missing data or wrong date interpretation)
-        if count == 0 and gemini_service:
-            logger.info("Count is 0, verifying with Gemini for month=%d, year=%d", month, year)
+        # If count is 0, double-check with Council/Gemini (might be missing data or wrong date interpretation)
+        if count == 0 and (council_service or gemini_service):
+            logger.info("Count is 0, verifying with Council/Gemini for month=%d, year=%d", month, year)
             import datetime as dt
             # Fetch extended metrics for the specific year
             start_date = dt.date(year, 1, 1)
@@ -276,16 +295,26 @@ async def handle_webhook(
                 end_date=end_date,
                 max_rows=10000,
             )
-            gemini_response = await gemini_service.answer_question(
-                question=incoming_text,
-                metrics=metrics,
-                knowledge_sections=hazard_sections,
-            )
-            if gemini_response and "לא מצאתי" not in gemini_response and "חסר" not in gemini_response.lower():
-                logger.info("Gemini found data, using Gemini response")
-                response_text = gemini_response
+            
+            # Prefer Council over Gemini
+            if council_service:
+                llm_response = await council_service.answer_question(
+                    question=incoming_text,
+                    metrics=metrics,
+                    knowledge_sections=hazard_sections,
+                )
             else:
-                logger.info("Gemini also found no data, using 0 count")
+                llm_response = await gemini_service.answer_question(
+                    question=incoming_text,
+                    metrics=metrics,
+                    knowledge_sections=hazard_sections,
+                )
+            
+            if llm_response and "לא מצאתי" not in llm_response and "חסר" not in llm_response.lower():
+                logger.info("LLM found data, using LLM response")
+                response_text = llm_response
+            else:
+                logger.info("LLM also found no data, using 0 count")
                 response_text = build_monthly_containers_response(count, month, year)
         else:
             response_text = build_monthly_containers_response(count, month, year)
@@ -312,22 +341,31 @@ async def handle_webhook(
         )
         logger.info("Response text: %s", response_text)
     elif intent.name == "llm_analysis":
-        if not gemini_service:
-            response_text = build_fallback_response()
-        else:
-            start_date = intent.parameters.get("start_date")
-            end_date = intent.parameters.get("end_date")
-            metrics = supabase_service.get_metrics_summary(
-                start_date=start_date,
-                end_date=end_date,
+        start_date = intent.parameters.get("start_date")
+        end_date = intent.parameters.get("end_date")
+        metrics = supabase_service.get_metrics_summary(
+            start_date=start_date,
+            end_date=end_date,
+        )
+        
+        # Prefer Council over Gemini
+        if council_service:
+            response_text = await council_service.answer_question(
+                question=incoming_text,
+                metrics=metrics,
+                knowledge_sections=hazard_sections,
             )
+        elif gemini_service:
             response_text = await gemini_service.answer_question(
                 question=incoming_text,
                 metrics=metrics,
                 knowledge_sections=hazard_sections,
             )
-            if not response_text:
-                response_text = build_fallback_response()
+        else:
+            response_text = build_fallback_response()
+        
+        if not response_text:
+            response_text = build_fallback_response()
     else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Intent not implemented"
