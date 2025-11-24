@@ -207,8 +207,17 @@ async def handle_webhook(
         logger.info("No intent matched, using Gemini or fallback")
         if gemini_service:
             logger.info("Gemini service available, fetching metrics...")
-            metrics = supabase_service.get_metrics_summary()
-            logger.info("Metrics fetched, calling Gemini with question: %s", incoming_text)
+            # Fetch extended metrics (last 2 years) to give Gemini more context for date queries
+            import datetime as dt
+            end_date = dt.date.today()
+            start_date = end_date - dt.timedelta(days=730)  # 2 years of data
+            metrics = supabase_service.get_metrics_summary(
+                start_date=start_date,
+                end_date=end_date,
+                max_rows=5000,  # More rows for better coverage
+            )
+            logger.info("Metrics fetched (period: %s to %s), calling Gemini with question: %s", 
+                       start_date.isoformat(), end_date.isoformat(), incoming_text)
             response_text = await gemini_service.answer_question(
                 question=incoming_text,
                 metrics=metrics,
