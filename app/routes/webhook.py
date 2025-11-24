@@ -15,6 +15,11 @@ from fastapi import (
     status,
 )
 
+from app.constants import (
+    MAX_CONVERSATION_HISTORY,
+    DEFAULT_METRICS_YEARS_BACK,
+    DEFAULT_MAX_ROWS_FOR_LLM,
+)
 from app.models.greenapi import GreenWebhookPayload
 from app.services.intent_engine import IntentEngine, IntentResult
 from app.services.response_builder import (
@@ -209,7 +214,7 @@ async def handle_webhook(
     # Get conversation history for context
     conversation_history = supabase_service.get_recent_user_queries(
         user_phone=chat_id,
-        limit=5,
+        limit=MAX_CONVERSATION_HISTORY,
         exclude_current=True,
     )
     if conversation_history:
@@ -226,11 +231,11 @@ async def handle_webhook(
         # Prefer Council service (multi-model with ranking) over Gemini
         import datetime as dt
         end_date = dt.date.today()
-        start_date = dt.date(end_date.year - 5, 1, 1)  # 5 years back from today
+        start_date = dt.date(end_date.year - DEFAULT_METRICS_YEARS_BACK, 1, 1)
         metrics = supabase_service.get_metrics_summary(
             start_date=start_date,
             end_date=end_date,
-            max_rows=10000,  # More rows for better coverage of historical data
+            max_rows=DEFAULT_MAX_ROWS_FOR_LLM,
         )
         
         if council_service:
@@ -305,7 +310,7 @@ async def handle_webhook(
             metrics = supabase_service.get_metrics_summary(
                 start_date=start_date,
                 end_date=end_date,
-                max_rows=10000,
+                max_rows=DEFAULT_MAX_ROWS_FOR_LLM,
             )
             
             # Prefer Council over Gemini

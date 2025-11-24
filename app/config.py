@@ -13,6 +13,8 @@ from typing import Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
 
+from app.constants import DEFAULT_BOT_DISPLAY_NAME
+
 
 class Settings(BaseModel):
     """Runtime configuration loaded from environment variables."""
@@ -23,7 +25,7 @@ class Settings(BaseModel):
     supabase_url: str
     supabase_service_role_key: str
     supabase_schema: Optional[str] = None
-    bot_display_name: str = "Operations Bot"
+    bot_display_name: str = DEFAULT_BOT_DISPLAY_NAME
     gemini_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
 
@@ -50,7 +52,7 @@ def get_settings() -> Settings:
                 "SUPABASE_SERVICE_ROLE_KEY", credentials
             ),
             supabase_schema=_safe_schema_env(credentials),
-            bot_display_name=os.getenv("BOT_DISPLAY_NAME", "Operations Bot"),
+            bot_display_name=os.getenv("BOT_DISPLAY_NAME", DEFAULT_BOT_DISPLAY_NAME),
             gemini_api_key=_optional_env("GEMINI_API_KEY", credentials),
             openrouter_api_key=_optional_env("OPENROUTER_API_KEY", credentials),
         )

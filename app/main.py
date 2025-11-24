@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
+from app.constants import VERSION, APP_NAME, DEFAULT_BOT_DISPLAY_NAME
 from app.routes import webhook
 from app.services.gemini_client import GeminiService
 from app.services.council_client import CouncilService
@@ -69,8 +70,8 @@ async def lifespan(application: FastAPI):
 
 
 app = FastAPI(
-    title="WhatsApp Operations Bot",
-    version="0.1.0",
+    title=APP_NAME,
+    version=VERSION,
     lifespan=lifespan,
 )
 
