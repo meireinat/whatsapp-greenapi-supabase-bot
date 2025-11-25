@@ -93,22 +93,16 @@ def build_fallback_response() -> str:
 def build_container_status_response(
     container_id: str, results: Sequence[PortStatusResult]
 ) -> str:
-    lines: list[str] = [
-        f"סטטוס מכולה {container_id.upper()}",
-        "",
-    ]
+    lines: list[str] = [f"סטטוס מכולה {container_id.upper()}"]
 
     for result in results:
         status_emoji = "✅" if result.success else "⚠️"
-        lines.append(f"{status_emoji} {result.port_name}")
-        lines.append(result.summary)
+        lines.append(f"{status_emoji} {result.port_name} – {result.summary}")
         if result.error and not result.success:
-            lines.append(f"סיבה: {result.error}")
+            lines.append(f"• סיבה: {result.error}")
         if result.details:
             for label, value in result.details:
                 lines.append(f"• {label}: {value}")
-        lines.append(f"קישור למקור: {result.url}")
-        lines.append("")
 
     lines.append("הנתונים מתקבלים ישירות מאתרי הנמלים ועשויים להתעדכן מעת לעת.")
     return "\n".join(lines).strip()
