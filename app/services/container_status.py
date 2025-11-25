@@ -114,36 +114,70 @@ class ContainerStatusService:
         self, client: httpx.AsyncClient, container_id: str
     ) -> PortStatusResult:
         try:
-            resp = await client.get(
-                self.ASHDOD_URL,
-                params={"MISMHOLA": container_id},
-                headers=self.ASHDOD_HEADERS,
-            )
-            resp.raise_for_status()
-            summary = self._parse_ashdod_html(resp.text)
-            events = summary["events"]
-            success = bool(events)
-            details = (
-                [(f"אירוע {idx + 1}", event) for idx, event in enumerate(events)]
-                if events
-                else None
-            )
-            summary_text = (
-                f"נמצאו {len(events)} אירועים אחרונים."
-                if events
-                else "הדף נטען אך לא נמצאה רשומת מכולה."
-            )
-            return PortStatusResult(
-                port_name="נמל אשדוד",
-                url=str(resp.request.url),
-                success=success,
-                summary=summary_text,
-                details=details,
-                error=None if success else "missing-data",
-            )
+            html = await self._get_ashdod_html(client, container_id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in {403, 429, 503}:
+                try:
+                    html = await asyncio.to_thread(
+                        self._get_ashdod_html_sync, container_id
+                    )
+                except Exception as fallback_exc:  # pragma: no cover - best effort
+                    return self._build_error_result(
+                        "נמל אשדוד",
+                        self.ASHDOD_URL,
+                        fallback_exc,
+                    )
+            else:
+                return self._build_error_result("נמל אשדוד", self.ASHDOD_URL, exc)
         except Exception as exc:
             return self._build_error_result("נמל אשדוד", self.ASHDOD_URL, exc)
 
+        summary = self._parse_ashdod_html(html)
+        events = summary["events"]
+        success = bool(events)
+        details = (
+            [(f"אירוע {idx + 1}", event) for idx, event in enumerate(events)]
+            if events
+            else None
+        )
+        summary_text = (
+            f"נמצאו {len(events)} אירועים אחרונים."
+            if events
+            else "הדף נטען אך לא נמצאה רשומת מכולה."
+        )
+        return PortStatusResult(
+            port_name="נמל אשדוד",
+            url=self.ASHDOD_URL,
+            success=success,
+            summary=summary_text,
+            details=details,
+            error=None if success else "missing-data",
+        )
+
+    async def _get_ashdod_html(
+        self, client: httpx.AsyncClient, container_id: str
+    ) -> str:
+        resp = await client.get(
+            self.ASHDOD_URL,
+            params={"MISMHOLA": container_id},
+            headers=self.ASHDOD_HEADERS,
+        )
+        resp.raise_for_status()
+        return resp.text
+
+    def _get_ashdod_html_sync(self, container_id: str) -> str:
+        with httpx.Client(
+            headers=self.ASHDOD_HEADERS,
+            timeout=self._timeout,
+            follow_redirects=True,
+            http2=True,
+        ) as sync_client:
+            resp = sync_client.get(
+                self.ASHDOD_URL,
+                params={"MISMHOLA": container_id},
+            )
+            resp.raise_for_status()
+            return resp.text
     async def _fetch_haifa(
         self, client: httpx.AsyncClient, container_id: str
     ) -> PortStatusResult:
