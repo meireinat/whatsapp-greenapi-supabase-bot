@@ -20,6 +20,7 @@ from app.services.hazard_knowledge import HazardKnowledgeBase
 from app.services.greenapi_client import GreenAPIClient
 from app.services.intent_engine import IntentEngine
 from app.services.supabase_client import SupabaseService
+from app.services.container_status import ContainerStatusService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ async def lifespan(application: FastAPI):
     )
     application.state.green_webhook_token = settings.green_api_webhook_token
     application.state.hazard_knowledge = HazardKnowledgeBase()
+    application.state.container_status_service = ContainerStatusService()
     if settings.gemini_api_key:
         application.state.gemini_service = GeminiService(
             api_key=settings.gemini_api_key,

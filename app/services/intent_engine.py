@@ -115,6 +115,14 @@ class IntentEngine:
         re.compile(r"\b(?:ניתוח|נתח|גמיני|Gemini|AI)\b", re.IGNORECASE),
     )
 
+    CONTAINER_STATUS_PATTERNS = (
+        re.compile(r"\b(?:סטטוס|מצב)\b.*\bמכול", re.IGNORECASE),
+        re.compile(r"\bcontainer\s+status\b", re.IGNORECASE),
+        re.compile(r"\bMISMHOLA\b", re.IGNORECASE),
+    )
+
+    CONTAINER_ID_PATTERN = re.compile(r"\b([A-Z]{4}\d{7}|\d{9,12})\b", re.IGNORECASE)
+
     def match(self, text: str) -> IntentResult | None:
         import logging
         logger = logging.getLogger(__name__)
@@ -189,6 +197,23 @@ class IntentEngine:
                 if dates:
                     params.update(dates)
                 return IntentResult(name="llm_analysis", parameters=params)
+
+        for pattern in self.CONTAINER_STATUS_PATTERNS:
+            if pattern.search(stripped):
+                container_id = self._extract_container_id(stripped)
+                if container_id:
+                    return IntentResult(
+                        name="container_status_lookup",
+                        parameters={"container_id": container_id},
+                    )
+
+        # If a container id was provided without explicit keywords, still try to help.
+        container_id = self._extract_container_id(stripped)
+        if container_id:
+            return IntentResult(
+                name="container_status_lookup",
+                parameters={"container_id": container_id},
+            )
 
         logger.info("No intent matched for text: %s", stripped)
         return None
@@ -310,4 +335,19 @@ class IntentEngine:
             "month2": month2_params["month"],
             "year2": month2_params["year"],
         }
+
+    def _extract_container_id(self, text: str) -> str | None:
+        """
+        Try to extract a container identifier (either ISO format or MISMHOLA numeric).
+        """
+        match = self.CONTAINER_ID_PATTERN.search(text)
+        if match:
+            candidate = match.group(1).upper()
+            return candidate
+        mis_idx = text.lower().find("mismhola=")
+        if mis_idx != -1:
+            candidate = text[mis_idx + len("mismhola=") : mis_idx + len("mismhola=") + 12]
+            candidate = re.split(r"\s|&", candidate)[0]
+            return candidate.upper()
+        return None
 

@@ -5,6 +5,9 @@ Utilities for crafting human-friendly responses sent back to WhatsApp users.
 from __future__ import annotations
 
 import datetime as dt
+from typing import Sequence
+
+from app.services.container_status import PortStatusResult
 
 
 def build_daily_containers_response(count: int, target_date: dt.date) -> str:
@@ -85,4 +88,25 @@ def build_fallback_response() -> str:
         "מצטער, לא הצלחתי להבין את הבקשה. "
         "נסה לנסח מחדש או לשאול שאלה אחרת."
     )
+
+
+def build_container_status_response(
+    container_id: str, results: Sequence[PortStatusResult]
+) -> str:
+    lines: list[str] = [
+        f"סטטוס מכולה {container_id.upper()}",
+        "",
+    ]
+
+    for result in results:
+        status_emoji = "✅" if result.success else "⚠️"
+        line = f"{status_emoji} {result.port_name}:\n{result.summary}"
+        if result.error:
+            line += f" ({result.error})"
+        line += f"\nקישור: {result.url}"
+        lines.append(line)
+        lines.append("")
+
+    lines.append("הנתונים מתקבלים ישירות מאתרי הנמלים ועשויים להתעדכן מעת לעת.")
+    return "\n".join(lines).strip()
 

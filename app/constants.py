@@ -31,3 +31,4 @@ MAX_CONVERSATION_HISTORY = 5  # Maximum number of previous queries to retrieve
 DEFAULT_METRICS_YEARS_BACK = 5  # Years of historical data to fetch for LLM analysis
 DEFAULT_MAX_ROWS_FOR_LLM = 10000  # Maximum rows to fetch for LLM analysis
 
+

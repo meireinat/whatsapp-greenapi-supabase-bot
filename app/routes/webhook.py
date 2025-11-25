@@ -29,12 +29,14 @@ from app.services.response_builder import (
     build_monthly_containers_response,
     build_comparison_containers_response,
     build_vehicles_range_response,
+    build_container_status_response,
 )
 from app.services.supabase_client import SupabaseService
 from app.services.gemini_client import GeminiService
 from app.services.council_client import CouncilService
 from app.services.greenapi_client import GreenAPIClient, GreenAPIQuotaExceededError
 from app.services.hazard_knowledge import HazardKnowledgeBase
+from app.services.container_status import ContainerStatusService
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +149,12 @@ def get_webhook_token() -> str | None:
     return getattr(app.state, "green_webhook_token", None)
 
 
+def get_container_status_service() -> ContainerStatusService | None:
+    from app.main import app
+
+    return getattr(app.state, "container_status_service", None)
+
+
 @router.post(
     "/webhook",
     status_code=status.HTTP_200_OK,
@@ -161,6 +169,7 @@ async def handle_webhook(
     gemini_service: GeminiService | None = Depends(get_gemini_service),
     council_service: CouncilService | None = Depends(get_council_service),
     hazard_knowledge: HazardKnowledgeBase | None = Depends(get_hazard_knowledge),
+    container_status_service: ContainerStatusService | None = Depends(get_container_status_service),
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Depends(get_webhook_token),
 ) -> Response:
@@ -387,6 +396,14 @@ async def handle_webhook(
         
         if not response_text:
             response_text = build_fallback_response()
+    elif intent.name == "container_status_lookup":
+        container_id = str(intent.parameters["container_id"])
+        if not container_status_service:
+            response_text = "שירות בדיקת הסטטוס אינו זמין כרגע."
+        else:
+            logger.info("Fetching container status for %s across all ports", container_id)
+            statuses = await container_status_service.lookup(container_id)
+            response_text = build_container_status_response(container_id, statuses)
     else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Intent not implemented"
