@@ -100,11 +100,14 @@ def build_container_status_response(
 
     for result in results:
         status_emoji = "✅" if result.success else "⚠️"
-        line = f"{status_emoji} {result.port_name}:\n{result.summary}"
-        if result.error:
-            line += f" ({result.error})"
-        line += f"\nקישור: {result.url}"
-        lines.append(line)
+        lines.append(f"{status_emoji} {result.port_name}")
+        lines.append(result.summary)
+        if result.error and not result.success:
+            lines.append(f"סיבה: {result.error}")
+        if result.details:
+            for label, value in result.details:
+                lines.append(f"• {label}: {value}")
+        lines.append(f"קישור למקור: {result.url}")
         lines.append("")
 
     lines.append("הנתונים מתקבלים ישירות מאתרי הנמלים ועשויים להתעדכן מעת לעת.")

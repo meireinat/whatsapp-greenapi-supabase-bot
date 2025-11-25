@@ -6,4 +6,5 @@ python-dotenv>=1.0,<2.0
 supabase>=2.3,<3.0
 google-genai>=0.4,<1.0
 pypdf>=6,<7
+beautifulsoup4>=4.12,<5
 
