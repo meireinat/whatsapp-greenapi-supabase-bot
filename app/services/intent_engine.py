@@ -282,7 +282,7 @@ class IntentEngine:
             "september": 9, "october": 10, "november": 11, "december": 12,
         }
         
-        month_name = groups.get("month_name", "").strip()
+        month_name = IntentEngine._clean_token(groups.get("month_name", ""))
         if not month_name:
             return None
         
@@ -296,7 +296,7 @@ class IntentEngine:
             return None
         
         # Parse year (default to current year if not provided)
-        year_text = groups.get("year", "")
+        year_text = IntentEngine._clean_token(groups.get("year", ""))
         if year_text:
             year = int(year_text)
             if year < 100:
@@ -310,20 +310,20 @@ class IntentEngine:
     def _parse_comparison(groups: Mapping[str, str]) -> dict[str, int] | None:
         """Parse two months for comparison: month1/year1 vs month2/year2."""
         month1_params = IntentEngine._parse_month({
-            "month_name": groups.get("month1_name", ""),
-            "year": groups.get("year1", ""),
+            "month_name": IntentEngine._clean_token(groups.get("month1_name", "")),
+            "year": IntentEngine._clean_token(groups.get("year1", "")),
         })
         if not month1_params:
             return None
         
         # For second month, use year2 if provided, otherwise use year1 (same year comparison)
-        year2_text = groups.get("year2", "")
+        year2_text = IntentEngine._clean_token(groups.get("year2", ""))
         if not year2_text:
             # If no year2, assume same year as year1
             year2_text = str(month1_params["year"])
         
         month2_params = IntentEngine._parse_month({
-            "month_name": groups.get("month2_name", ""),
+            "month_name": IntentEngine._clean_token(groups.get("month2_name", "")),
             "year": year2_text,
         })
         if not month2_params:
@@ -350,4 +350,10 @@ class IntentEngine:
             candidate = re.split(r"\s|&", candidate)[0]
             return candidate.upper()
         return None
+
+    @staticmethod
+    def _clean_token(token: str | None) -> str:
+        if not token:
+            return ""
+        return token.strip(" \t\n\r.,?!:;\"'()[]{}")
 
