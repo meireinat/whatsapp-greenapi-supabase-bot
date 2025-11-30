@@ -390,13 +390,22 @@ class TopicKnowledgeBase:
         """
         # Common Hebrew synonyms/related terms
         synonym_map: dict[str, list[str]] = {
-            "נתב": ["מנתב", "router", "מנהל תנועה"],
+            "נתב": ["מנתב", "router", "מנהל תנועה", "pilot"],
             "דרישות": ["דרישה", "תנאים", "חובות", "requirements"],
             "מכולה": ["קונטיינר", "container", "מכולות"],
             "נמל": ["נמלים", "port", "harbor"],
             "תפעול": ["תפעולי", "operational", "operation"],
             "חובה": ["חובות", "must", "required"],
             "שנה": ["שנתי", "yearly", "annual", "year"],
+            "תור": ["תורים", "turn", "queue", "סדר"],
+            "אשדוד": ["ashdod", "נמל אשדוד"],
+            "חיפה": ["haifa", "נמל חיפה"],
+            "אילת": ["eilat", "נמל אילת"],
+            "רשות": ["רשויות", "authority", "authorities"],
+            "ספנות": ["shipping", "maritime"],
+            "אוניה": ["אוניות", "ship", "vessel", "ships"],
+            "כניסה": ["הכנסה", "entry", "entering", "enter"],
+            "סדר": ["סדר", "order", "sequence", "procedure"],
         }
         
         token_lower = token.lower()

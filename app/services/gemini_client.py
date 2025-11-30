@@ -153,8 +153,15 @@ class GeminiService:
                     f"[{index}] {title} ({source}, id={identifier}):\n{excerpt}"
                 )
         else:
-            parts.append("Note: No specific knowledge base excerpts were found for this question.")
-            parts.append("You should use your general knowledge about port operations, maritime regulations, and operational procedures to answer.")
+            parts.append("IMPORTANT: No specific knowledge base excerpts were found for this question.")
+            parts.append("This means either:")
+            parts.append("1. The relevant document is not in the knowledge base yet")
+            parts.append("2. The search did not find matching content")
+            parts.append("")
+            parts.append("Before answering with general knowledge, check if the question mentions specific documents, regulations, or procedures that might exist in the knowledge base.")
+            parts.append("If the question is about Israeli port operations, regulations, or procedures, there may be official documents that should be consulted.")
+            parts.append("")
+            parts.append("You should still provide an answer using your general knowledge, but mention that specific documents (like 'נוהל התור התפעולי' or 'רשות הספנות והנמלים') might contain more accurate information.")
         
         parts.append("Question:")
         parts.append(question)
@@ -162,12 +169,14 @@ class GeminiService:
         parts.append("Instructions:")
         parts.append("- Answer the question based on the context provided above (metrics data)")
         parts.append("- If the question is about operational procedures, regulations, port operations, or job requirements:")
-        parts.append("  * First check if knowledge base excerpts are available and use them")
-        parts.append("  * If no excerpts are available, use your general knowledge about port operations, maritime industry, and Israeli port regulations")
+        parts.append("  * FIRST: Check if knowledge base excerpts are available - if yes, use them as the primary source")
+        parts.append("  * If no excerpts are available, check if the question mentions specific documents (e.g., 'נוהל התור התפעולי', 'רשות הספנות והנמלים')")
+        parts.append("  * If specific documents are mentioned but not found in excerpts, mention that these documents should be added to the knowledge base for accurate answers")
+        parts.append("  * Then use your general knowledge about port operations, maritime industry, and Israeli port regulations")
         parts.append("  * Provide a helpful, accurate answer based on standard industry practices")
         parts.append("- For questions about data (containers, vehicles, dates): use only the metrics data provided")
         parts.append("- Always provide a clear, helpful answer in Hebrew")
-        parts.append("- If you're using general knowledge (not from the provided data), you can mention it, but still provide the answer")
+        parts.append("- If you're using general knowledge (not from the provided data), mention it, but still provide the answer")
         parts.append(
             "\n"
             "CRITICAL INSTRUCTIONS:\n"
