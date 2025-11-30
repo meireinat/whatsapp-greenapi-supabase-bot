@@ -62,49 +62,104 @@ class TopicKnowledgeBase:
         return name if name else filename
 
     @staticmethod
-    def _split_into_chunks(text: str, chunk_size: int = 1000) -> list[str]:
+    def _split_into_chunks(text: str, chunk_size: int = 2000) -> list[str]:
         """
-        Split text into chunks of approximately chunk_size characters.
-        Tries to break at paragraph boundaries (double newlines) or sentence boundaries.
+        Split text into chunks by semantic units (sections, paragraphs) rather than just size.
+        Tries to preserve meaning by breaking at natural boundaries.
         """
         if len(text) <= chunk_size:
             return [text] if text.strip() else []
         
         chunks: list[str] = []
-        remaining = text
         
-        while len(remaining) > chunk_size:
-            # Try to break at paragraph boundary first
-            para_break = remaining.rfind("\n\n", 0, chunk_size)
-            if para_break > chunk_size // 2:
-                chunks.append(remaining[:para_break].strip())
-                remaining = remaining[para_break + 2:].lstrip()
+        # First, try to split by clear section markers (better semantic meaning)
+        section_markers = [
+            r"\n\s*#{1,3}\s+",  # Markdown headers (# ## ###)
+            r"\n\s*\d+[\.\)]\s+",  # Numbered sections (1. 2. 3.)
+            r"\n\s*[א-ת]+[\.\)]\s+",  # Hebrew numbered sections
+            r"\n\s*[•\-*]\s+",  # Bullet points (often indicate new topic)
+        ]
+        
+        # Try each marker pattern
+        for pattern in section_markers:
+            matches = list(re.finditer(pattern, text))
+            if len(matches) > 1:
+                # Split by these markers, but respect chunk_size
+                last_pos = 0
+                current_chunk = ""
+                
+                for match in matches:
+                    segment = text[last_pos:match.start()].strip()
+                    if segment:
+                        if len(current_chunk) + len(segment) + 2 <= chunk_size:
+                            current_chunk += "\n\n" + segment if current_chunk else segment
+                        else:
+                            if current_chunk:
+                                chunks.append(current_chunk)
+                            current_chunk = segment
+                    last_pos = match.start()
+                
+                # Add remaining
+                remaining = text[last_pos:].strip()
+                if remaining:
+                    if len(current_chunk) + len(remaining) + 2 <= chunk_size:
+                        current_chunk += "\n\n" + remaining if current_chunk else remaining
+                    else:
+                        if current_chunk:
+                            chunks.append(current_chunk)
+                        chunks.append(remaining)
+                elif current_chunk:
+                    chunks.append(current_chunk)
+                
+                if chunks:
+                    return chunks
+        
+        # If no section markers, split by paragraphs (preserves semantic meaning)
+        paragraphs = text.split("\n\n")
+        current_chunk = ""
+        
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
                 continue
             
-            # Try to break at sentence boundary
-            sentence_break = max(
-                remaining.rfind(". ", 0, chunk_size),
-                remaining.rfind(".\n", 0, chunk_size),
-                remaining.rfind("! ", 0, chunk_size),
-                remaining.rfind("? ", 0, chunk_size),
-            )
-            if sentence_break > chunk_size // 2:
-                chunks.append(remaining[:sentence_break + 1].strip())
-                remaining = remaining[sentence_break + 1:].lstrip()
-                continue
-            
-            # Fallback: break at word boundary
-            word_break = remaining.rfind(" ", 0, chunk_size)
-            if word_break > chunk_size // 2:
-                chunks.append(remaining[:word_break].strip())
-                remaining = remaining[word_break:].lstrip()
+            if len(current_chunk) + len(para) + 2 <= chunk_size:
+                current_chunk += "\n\n" + para if current_chunk else para
             else:
-                # Force break if no good boundary found
-                chunks.append(remaining[:chunk_size].strip())
-                remaining = remaining[chunk_size:].lstrip()
+                if current_chunk:
+                    chunks.append(current_chunk)
+                current_chunk = para
         
-        if remaining.strip():
-            chunks.append(remaining.strip())
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        # If still no chunks (very long paragraphs), fall back to sentence-based splitting
+        if not chunks or any(len(c) > chunk_size * 1.5 for c in chunks):
+            chunks = []
+            remaining = text
+            while len(remaining) > chunk_size:
+                # Try to break at sentence boundary
+                sentence_break = max(
+                    remaining.rfind(". ", 0, chunk_size),
+                    remaining.rfind(".\n", 0, chunk_size),
+                    remaining.rfind("! ", 0, chunk_size),
+                    remaining.rfind("? ", 0, chunk_size),
+                )
+                if sentence_break > chunk_size // 2:
+                    chunks.append(remaining[:sentence_break + 1].strip())
+                    remaining = remaining[sentence_break + 1:].lstrip()
+                else:
+                    # Fallback: break at word boundary
+                    word_break = remaining.rfind(" ", 0, chunk_size)
+                    if word_break > chunk_size // 2:
+                        chunks.append(remaining[:word_break].strip())
+                        remaining = remaining[word_break:].lstrip()
+                    else:
+                        chunks.append(remaining[:chunk_size].strip())
+                        remaining = remaining[chunk_size:].lstrip()
+            
+            if remaining.strip():
+                chunks.append(remaining.strip())
         
         return chunks
 
@@ -264,23 +319,45 @@ class TopicKnowledgeBase:
 
     @staticmethod
     def _score_section(section: TopicSection, tokens: Iterable[str]) -> float:
+        """
+        Enhanced scoring algorithm that considers:
+        1. Topic name matches (highest weight)
+        2. Token frequency in text (weighted by token length)
+        3. Token position (earlier in text = more relevant)
+        """
         score = 0.0
         text = section.text_lower
         length = max(len(text), 1)
+        token_list = list(tokens)  # Convert to list for multiple passes
         
-        # Boost score if topic name matches query tokens
+        # 1. Topic name match (high boost - 3x weight)
         topic_lower = section.topic.lower()
         topic_tokens = TopicKnowledgeBase._tokenize(topic_lower)
-        topic_match_boost = 0.0
-        for token in tokens:
-            if token in topic_tokens:
-                topic_match_boost += 2.0  # Boost for topic matches
+        topic_match_count = sum(1 for token in token_list if token in topic_tokens)
+        if topic_match_count > 0:
+            score += topic_match_count * 3.0
         
-        for token in tokens:
+        # 2. Text content matches (weighted by token length and position)
+        for token in token_list:
             occurrences = text.count(token)
             if occurrences:
-                score += occurrences * (len(token) / length)
+                # Weight by token length (longer tokens are more specific)
+                token_weight = max(1.0, len(token) / 5.0)
+                
+                # Find first occurrence position (earlier = more relevant)
+                first_pos = text.find(token)
+                position_weight = 1.0 if first_pos == -1 else max(0.5, 1.0 - (first_pos / length))
+                
+                # Calculate score: frequency * token_weight * position_weight / length
+                score += occurrences * token_weight * position_weight * (100.0 / length)
         
-        score += topic_match_boost
+        # 3. Phrase matching bonus (if multiple consecutive tokens appear together)
+        if len(token_list) >= 2:
+            # Check for 2-word phrases
+            for i in range(len(token_list) - 1):
+                phrase = f"{token_list[i]} {token_list[i+1]}"
+                if phrase in text:
+                    score += 5.0  # Bonus for phrase matches
+        
         return score
 
