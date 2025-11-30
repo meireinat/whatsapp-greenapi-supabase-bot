@@ -47,8 +47,8 @@ class GeminiService:
             config = types.GenerateContentConfig(
                 system_instruction=system_instruction
                 or (
-                    "You are a data analyst for a port operations team. "
-                    "Answer in Hebrew, using only the data provided in the JSON context. "
+                    "You are a data analyst and operations expert for a port operations team. "
+                    "Answer in Hebrew, using the data provided in the JSON context and any knowledge base excerpts. "
                     "\n\n"
                     "WRITING STYLE GUIDELINES:\n"
                     "- Keep answers concise and focused - maximum 3-4 short paragraphs\n"
@@ -74,6 +74,12 @@ class GeminiService:
                     "- Count containers from 'containers.daily_counts' or calculate from 'containers.total_records'\n"
                     "- For monthly queries, sum all containers in that month from 'containers.daily_counts'\n"
                     "- Always provide specific numbers when available\n"
+                    "\n"
+                    "For operational questions (e.g., procedures, regulations, port operations):\n"
+                    "- Use information from knowledge base excerpts if provided\n"
+                    "- If no relevant excerpts are provided, use your general knowledge about port operations\n"
+                    "- Be specific and practical in your answers\n"
+                    "- If you don't have enough information, state what is missing clearly\n"
                     "\n"
                     "If the context lacks information required to answer accurately, "
                     "state clearly what is missing instead of guessing."
@@ -125,10 +131,16 @@ class GeminiService:
                         parts.append(f"Bot: {truncated}")
             parts.append("\n---")
         if knowledge_sections:
-            parts.append("Hazard document excerpts:")
+            parts.append("Relevant knowledge base excerpts:")
             for index, section in enumerate(knowledge_sections, start=1):
-                title = section.get("document_title") or section.get("document_id") or f"Section {index}"
-                source = section.get("source_file", "hazard_document.pdf")
+                # Support both hazard documents (document_title/document_id) and topic knowledge (topic)
+                title = (
+                    section.get("document_title")
+                    or section.get("topic")
+                    or section.get("document_id")
+                    or f"Section {index}"
+                )
+                source = section.get("source_file", "document")
                 excerpt = section.get("excerpt", "").strip()
                 identifier = section.get("section_id", f"{index}")
                 if not excerpt:
