@@ -370,15 +370,22 @@ Provide a clear, well-reasoned final answer in Hebrew that represents the counci
                 parts.append(
                     f"[{index}] {title} ({source}, id={identifier}):\n{excerpt}"
                 )
+        else:
+            parts.append("Note: No specific knowledge base excerpts were found for this question.")
+            parts.append("You should use your general knowledge about port operations, maritime regulations, and operational procedures to answer.")
+        
         parts.append("Question:")
         parts.append(question)
         parts.append("\n")
         parts.append("Instructions:")
-        parts.append("- Answer the question based on the context provided above")
-        parts.append("- If the question is about operational procedures, regulations, or port operations, use the knowledge base excerpts if available")
-        parts.append("- If no relevant information is found in the context, you can use your general knowledge about port operations, but clearly state that the information is general")
-        parts.append("- Always provide a helpful answer, even if you need to explain that specific information is not available")
-        parts.append("- Answer in Hebrew, be clear and concise")
+        parts.append("- Answer the question based on the context provided above (metrics data)")
+        parts.append("- If the question is about operational procedures, regulations, port operations, or job requirements:")
+        parts.append("  * First check if knowledge base excerpts are available and use them")
+        parts.append("  * If no excerpts are available, use your general knowledge about port operations, maritime industry, and Israeli port regulations")
+        parts.append("  * Provide a helpful, accurate answer based on standard industry practices")
+        parts.append("- For questions about data (containers, vehicles, dates): use only the metrics data provided")
+        parts.append("- Always provide a clear, helpful answer in Hebrew")
+        parts.append("- If you're using general knowledge (not from the provided data), you can mention it, but still provide the answer")
         parts.append(
             "\n"
             "CRITICAL INSTRUCTIONS:\n"
@@ -447,11 +454,15 @@ Provide a clear, well-reasoned final answer in Hebrew that represents the counci
             "- For monthly queries, sum all containers in that month from 'containers.daily_counts'\n"
             "- Always provide specific numbers when available\n"
             "\n"
-            "For operational questions (e.g., procedures, regulations, port operations):\n"
+            "For operational questions (e.g., procedures, regulations, port operations, job requirements):\n"
             "- Use information from knowledge base excerpts if provided\n"
-            "- If no relevant excerpts are provided, use your general knowledge about port operations\n"
+            "- If no relevant excerpts are provided, you MUST use your general knowledge about:\n"
+            "  * Port operations and maritime industry standards\n"
+            "  * Israeli port regulations and procedures\n"
+            "  * Common operational requirements and best practices\n"
             "- Be specific and practical in your answers\n"
-            "- If you don't have enough information, state what is missing clearly\n"
+            "- DO NOT say 'no information available' - instead provide an answer based on general knowledge\n"
+            "- You can mention that the answer is based on general knowledge, but still provide the information\n"
             "\n"
             "If the context lacks information required to answer accurately, "
             "state clearly what is missing instead of guessing."
