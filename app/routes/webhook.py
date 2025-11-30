@@ -272,35 +272,47 @@ async def handle_webhook(
             max_rows=DEFAULT_MAX_ROWS_FOR_LLM,
         )
         
-        if council_service:
-            logger.info("Council service available, fetching metrics and using multi-model approach...")
-            logger.info("Metrics fetched (period: %s to %s), calling Council with question: %s", 
-                       start_date.isoformat(), end_date.isoformat(), incoming_text)
-            response_text = await council_service.answer_question(
-                question=incoming_text,
-                metrics=metrics,
-                knowledge_sections=combined_knowledge,
-                conversation_history=conversation_history,
-            )
-            logger.info("Council response: %s", response_text[:200] if response_text else "None")
-            if not response_text:
+        try:
+            if council_service:
+                logger.info("Council service available, fetching metrics and using multi-model approach...")
+                logger.info("Metrics fetched (period: %s to %s), calling Council with question: %s", 
+                           start_date.isoformat(), end_date.isoformat(), incoming_text)
+                response_text = await council_service.answer_question(
+                    question=incoming_text,
+                    metrics=metrics,
+                    knowledge_sections=combined_knowledge,
+                    conversation_history=conversation_history,
+                )
+                logger.info("Council response: %s", response_text[:200] if response_text else "None")
+                if not response_text or not response_text.strip():
+                    logger.warning("Council returned empty response, using fallback")
+                    response_text = build_fallback_response()
+            elif gemini_service:
+                logger.info("Council service not available, using Gemini service...")
+                logger.info("Metrics fetched (period: %s to %s), calling Gemini with question: %s", 
+                           start_date.isoformat(), end_date.isoformat(), incoming_text)
+                response_text = await gemini_service.answer_question(
+                    question=incoming_text,
+                    metrics=metrics,
+                    knowledge_sections=combined_knowledge,
+                    conversation_history=conversation_history,
+                )
+                logger.info("Gemini response: %s", response_text[:200] if response_text else "None")
+                if not response_text or not response_text.strip():
+                    logger.warning("Gemini returned empty response, using fallback")
+                    response_text = build_fallback_response()
+            else:
+                logger.info("Neither Council nor Gemini service available, using fallback")
                 response_text = build_fallback_response()
-        elif gemini_service:
-            logger.info("Council service not available, using Gemini service...")
-            logger.info("Metrics fetched (period: %s to %s), calling Gemini with question: %s", 
-                       start_date.isoformat(), end_date.isoformat(), incoming_text)
-            response_text = await gemini_service.answer_question(
-                question=incoming_text,
-                metrics=metrics,
-                knowledge_sections=combined_knowledge,
-                conversation_history=conversation_history,
-            )
-            logger.info("Gemini response: %s", response_text[:200] if response_text else "None")
-            if not response_text:
-                response_text = build_fallback_response()
-        else:
-            logger.info("Neither Council nor Gemini service available, using fallback")
+        except Exception as e:
+            logger.error("Error calling LLM service: %s", e, exc_info=True)
             response_text = build_fallback_response()
+        
+        # Ensure we always have a response
+        if not response_text or not response_text.strip():
+            logger.warning("Response is empty after all attempts, using fallback")
+            response_text = build_fallback_response()
+        
         background_tasks.add_task(
             send_message_with_error_handling,
             green_api_client,

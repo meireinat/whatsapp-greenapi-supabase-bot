@@ -370,8 +370,15 @@ Provide a clear, well-reasoned final answer in Hebrew that represents the counci
                 parts.append(
                     f"[{index}] {title} ({source}, id={identifier}):\n{excerpt}"
                 )
-        parts.append("Using only the context above, answer the following question:")
+        parts.append("Question:")
         parts.append(question)
+        parts.append("\n")
+        parts.append("Instructions:")
+        parts.append("- Answer the question based on the context provided above")
+        parts.append("- If the question is about operational procedures, regulations, or port operations, use the knowledge base excerpts if available")
+        parts.append("- If no relevant information is found in the context, you can use your general knowledge about port operations, but clearly state that the information is general")
+        parts.append("- Always provide a helpful answer, even if you need to explain that specific information is not available")
+        parts.append("- Answer in Hebrew, be clear and concise")
         parts.append(
             "\n"
             "CRITICAL INSTRUCTIONS:\n"
