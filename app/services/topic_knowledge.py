@@ -5,11 +5,12 @@ The topic/subject is extracted from the filename.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 import re
 from typing import Iterable, Sequence
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ DEFAULT_DATA_PATH = (
 @dataclass(frozen=True, slots=True)
 class TopicSection:
     """
-    Represents a single chunk extracted from a topic file.
+    Represents a single chunk extracted from a topic file with enhanced metadata.
     """
 
     section_id: str
@@ -29,6 +30,10 @@ class TopicSection:
     source_file: str
     text: str
     text_lower: str
+    # Enhanced metadata for better search
+    keywords: list[str] = field(default_factory=list)
+    summary: str = ""
+    questions: list[str] = field(default_factory=list)  # Questions this section can answer
 
 
 class TopicKnowledgeBase:
@@ -62,7 +67,7 @@ class TopicKnowledgeBase:
         return name if name else filename
 
     @staticmethod
-    def _split_into_chunks(text: str, chunk_size: int = 2000) -> list[str]:
+    def _split_into_chunks(text: str, chunk_size: int = 2000, overlap: int = 200) -> list[str]:
         """
         Split text into chunks by semantic units (sections, paragraphs) rather than just size.
         Tries to preserve meaning by breaking at natural boundaries.
@@ -117,6 +122,7 @@ class TopicKnowledgeBase:
         # If no section markers, split by paragraphs (preserves semantic meaning)
         paragraphs = text.split("\n\n")
         current_chunk = ""
+        prev_chunk_end = ""
         
         for para in paragraphs:
             para = para.strip()
@@ -127,10 +133,19 @@ class TopicKnowledgeBase:
                 current_chunk += "\n\n" + para if current_chunk else para
             else:
                 if current_chunk:
+                    # Add overlap from previous chunk end
+                    if prev_chunk_end and overlap > 0:
+                        overlap_text = prev_chunk_end[-overlap:] if len(prev_chunk_end) > overlap else prev_chunk_end
+                        current_chunk = overlap_text + "\n\n" + current_chunk
                     chunks.append(current_chunk)
+                    prev_chunk_end = current_chunk
                 current_chunk = para
         
         if current_chunk:
+            # Add overlap for last chunk too
+            if prev_chunk_end and overlap > 0:
+                overlap_text = prev_chunk_end[-overlap:] if len(prev_chunk_end) > overlap else prev_chunk_end
+                current_chunk = overlap_text + "\n\n" + current_chunk
             chunks.append(current_chunk)
         
         # If still no chunks (very long paragraphs), fall back to sentence-based splitting
@@ -162,6 +177,49 @@ class TopicKnowledgeBase:
                 chunks.append(remaining.strip())
         
         return chunks
+
+    @staticmethod
+    def _extract_metadata(text: str) -> dict[str, any]:  # type: ignore
+        """
+        Extract metadata from text: keywords, summary, and potential questions.
+        """
+        text_lower = text.lower()
+        
+        # Extract keywords (words that appear multiple times, excluding common words)
+        words = re.findall(r"[א-ת]{3,}|[A-Za-z]{4,}", text_lower)
+        word_counts = Counter(words)
+        
+        # Common words to exclude
+        common_words = {
+            "את", "על", "של", "לא", "כי", "אם", "זה", "הוא", "היא", "עם", "או", "גם",
+            "the", "and", "or", "is", "are", "was", "were", "for", "with", "from"
+        }
+        
+        # Get top keywords (appear at least 2 times)
+        keywords = [
+            word for word, count in word_counts.most_common(20)
+            if count >= 2 and word not in common_words and len(word) >= 3
+        ][:10]
+        
+        # Extract summary (first 2-3 sentences or 250 chars)
+        sentences = re.split(r"[.!?]\s+", text)
+        summary = ""
+        if sentences:
+            summary = ". ".join(sentences[:3]).strip()
+            if len(summary) > 250:
+                summary = summary[:247] + "..."
+        
+        # Extract questions from text (lines ending with ?)
+        questions = [
+            q.strip() for q in re.findall(r"[^.!?]*\?", text)
+            if len(q.strip()) > 15 and len(q.strip()) < 200
+        ][:5]
+        
+        return {
+            "keywords": keywords,
+            "summary": summary,
+            "questions": questions,
+        }
 
     @classmethod
     def _load_sections(cls, path: Path) -> list[TopicSection]:
@@ -224,9 +282,13 @@ class TopicKnowledgeBase:
                     chunks = cls._split_into_chunks(content)
                     logger.debug("Split file %s into %d chunks", file_path.name, len(chunks))
                     
-                    # Create sections from chunks
+                    # Create sections from chunks with metadata
                     for idx, chunk_text in enumerate(chunks):
                         section_id = f"{file_path.stem}-{idx + 1}"
+                        
+                        # Extract metadata
+                        metadata = cls._extract_metadata(chunk_text)
+                        
                         sections.append(
                             TopicSection(
                                 section_id=section_id,
@@ -234,6 +296,9 @@ class TopicKnowledgeBase:
                                 source_file=file_path.name,
                                 text=chunk_text,
                                 text_lower=chunk_text.lower(),
+                                keywords=metadata["keywords"],
+                                summary=metadata["summary"],
+                                questions=metadata["questions"],
                             )
                         )
                     
@@ -318,46 +383,106 @@ class TopicKnowledgeBase:
         return [token for token in re.findall(pattern, text.lower()) if token]
 
     @staticmethod
+    def _get_synonyms(token: str) -> list[str]:
+        """
+        Get synonyms or related terms for better matching.
+        This is a simple heuristic-based approach.
+        """
+        # Common Hebrew synonyms/related terms
+        synonym_map: dict[str, list[str]] = {
+            "נתב": ["מנתב", "router", "מנהל תנועה"],
+            "דרישות": ["דרישה", "תנאים", "חובות", "requirements"],
+            "מכולה": ["קונטיינר", "container", "מכולות"],
+            "נמל": ["נמלים", "port", "harbor"],
+            "תפעול": ["תפעולי", "operational", "operation"],
+            "חובה": ["חובות", "must", "required"],
+            "שנה": ["שנתי", "yearly", "annual", "year"],
+        }
+        
+        token_lower = token.lower()
+        synonyms = synonym_map.get(token_lower, [])
+        # Also check if token is contained in any key
+        for key, values in synonym_map.items():
+            if token_lower in key or key in token_lower:
+                synonyms.extend(values)
+        
+        return list(set(synonyms))  # Remove duplicates
+
+    @staticmethod
     def _score_section(section: TopicSection, tokens: Iterable[str]) -> float:
         """
-        Enhanced scoring algorithm that considers:
+        Enhanced scoring algorithm with metadata and synonym matching:
         1. Topic name matches (highest weight)
-        2. Token frequency in text (weighted by token length)
-        3. Token position (earlier in text = more relevant)
+        2. Keyword matches in extracted keywords (high weight)
+        3. Question matches (if query matches a question this section answers)
+        4. Text content matches (weighted by token length and position)
+        5. Synonym matching
+        6. Phrase matching
         """
         score = 0.0
         text = section.text_lower
         length = max(len(text), 1)
         token_list = list(tokens)  # Convert to list for multiple passes
         
-        # 1. Topic name match (high boost - 3x weight)
+        # 1. Topic name match (high boost - 4x weight)
         topic_lower = section.topic.lower()
         topic_tokens = TopicKnowledgeBase._tokenize(topic_lower)
         topic_match_count = sum(1 for token in token_list if token in topic_tokens)
         if topic_match_count > 0:
-            score += topic_match_count * 3.0
+            score += topic_match_count * 4.0
         
-        # 2. Text content matches (weighted by token length and position)
+        # 2. Keyword matches (high weight - these are important terms)
+        section_keywords_lower = [k.lower() for k in section.keywords]
+        keyword_matches = sum(1 for token in token_list if token in section_keywords_lower)
+        if keyword_matches > 0:
+            score += keyword_matches * 3.5
+        
+        # 3. Question matches (if query is similar to a question this section answers)
+        for question in section.questions:
+            question_tokens = TopicKnowledgeBase._tokenize(question.lower())
+            question_match = sum(1 for token in token_list if token in question_tokens)
+            if question_match >= 2:  # At least 2 matching tokens
+                score += question_match * 2.5
+        
+        # 4. Summary match
+        if section.summary:
+            summary_lower = section.summary.lower()
+            summary_matches = sum(1 for token in token_list if token in summary_lower)
+            if summary_matches > 0:
+                score += summary_matches * 2.0
+        
+        # 5. Text content matches (weighted by token length and position)
         for token in token_list:
+            # Direct match
             occurrences = text.count(token)
             if occurrences:
-                # Weight by token length (longer tokens are more specific)
                 token_weight = max(1.0, len(token) / 5.0)
-                
-                # Find first occurrence position (earlier = more relevant)
                 first_pos = text.find(token)
                 position_weight = 1.0 if first_pos == -1 else max(0.5, 1.0 - (first_pos / length))
-                
-                # Calculate score: frequency * token_weight * position_weight / length
                 score += occurrences * token_weight * position_weight * (100.0 / length)
+            
+            # Synonym matching
+            synonyms = TopicKnowledgeBase._get_synonyms(token)
+            for synonym in synonyms:
+                synonym_lower = synonym.lower()
+                if synonym_lower in text:
+                    score += 1.5  # Bonus for synonym matches
         
-        # 3. Phrase matching bonus (if multiple consecutive tokens appear together)
+        # 6. Phrase matching bonus (if multiple consecutive tokens appear together)
         if len(token_list) >= 2:
             # Check for 2-word phrases
             for i in range(len(token_list) - 1):
                 phrase = f"{token_list[i]} {token_list[i+1]}"
                 if phrase in text:
-                    score += 5.0  # Bonus for phrase matches
+                    score += 6.0  # Higher bonus for phrase matches
+        
+        # 7. All tokens present bonus (if all query tokens appear in section)
+        if len(token_list) > 0:
+            all_present = all(any(t in text or t in section.keywords or t in section.topic.lower() 
+                                 for t in [token] + TopicKnowledgeBase._get_synonyms(token)) 
+                            for token in token_list)
+            if all_present:
+                score += 3.0  # Bonus for comprehensive match
         
         return score
 
