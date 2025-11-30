@@ -36,6 +36,7 @@ from app.services.gemini_client import GeminiService
 from app.services.council_client import CouncilService
 from app.services.greenapi_client import GreenAPIClient, GreenAPIQuotaExceededError
 from app.services.hazard_knowledge import HazardKnowledgeBase
+from app.services.topic_knowledge import TopicKnowledgeBase
 from app.services.container_status import ContainerStatusService
 
 logger = logging.getLogger(__name__)
@@ -143,6 +144,12 @@ def get_hazard_knowledge() -> HazardKnowledgeBase | None:
     return getattr(app.state, "hazard_knowledge", None)
 
 
+def get_topic_knowledge() -> TopicKnowledgeBase | None:
+    from app.main import app
+
+    return getattr(app.state, "topic_knowledge", None)
+
+
 def get_webhook_token() -> str | None:
     from app.main import app
 
@@ -169,6 +176,7 @@ async def handle_webhook(
     gemini_service: GeminiService | None = Depends(get_gemini_service),
     council_service: CouncilService | None = Depends(get_council_service),
     hazard_knowledge: HazardKnowledgeBase | None = Depends(get_hazard_knowledge),
+    topic_knowledge: TopicKnowledgeBase | None = Depends(get_topic_knowledge),
     container_status_service: ContainerStatusService | None = Depends(get_container_status_service),
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Depends(get_webhook_token),
@@ -229,11 +237,28 @@ async def handle_webhook(
     if conversation_history:
         logger.info("Retrieved %d previous queries for context", len(conversation_history))
     
+    # Get knowledge sections from both hazard and topic knowledge bases
     hazard_sections = (
         hazard_knowledge.build_sections(incoming_text)
         if hazard_knowledge and hazard_knowledge.is_available()
         else None
     )
+    
+    topic_sections = (
+        topic_knowledge.build_sections(incoming_text)
+        if topic_knowledge and topic_knowledge.is_available()
+        else None
+    )
+    
+    # Combine knowledge sections (hazard first, then topic)
+    knowledge_sections = []
+    if hazard_sections:
+        knowledge_sections.extend(hazard_sections)
+    if topic_sections:
+        knowledge_sections.extend(topic_sections)
+    
+    # Use None if empty to maintain compatibility
+    combined_knowledge = knowledge_sections if knowledge_sections else None
 
     if not intent:
         logger.info("No intent matched, using Council/Gemini or fallback")
@@ -254,7 +279,7 @@ async def handle_webhook(
             response_text = await council_service.answer_question(
                 question=incoming_text,
                 metrics=metrics,
-                knowledge_sections=hazard_sections,
+                knowledge_sections=combined_knowledge,
                 conversation_history=conversation_history,
             )
             logger.info("Council response: %s", response_text[:200] if response_text else "None")
@@ -267,7 +292,7 @@ async def handle_webhook(
             response_text = await gemini_service.answer_question(
                 question=incoming_text,
                 metrics=metrics,
-                knowledge_sections=hazard_sections,
+                knowledge_sections=combined_knowledge,
                 conversation_history=conversation_history,
             )
             logger.info("Gemini response: %s", response_text[:200] if response_text else "None")
@@ -327,14 +352,14 @@ async def handle_webhook(
                 llm_response = await council_service.answer_question(
                     question=incoming_text,
                     metrics=metrics,
-                    knowledge_sections=hazard_sections,
+                    knowledge_sections=combined_knowledge,
                     conversation_history=conversation_history,
                 )
             else:
                 llm_response = await gemini_service.answer_question(
                     question=incoming_text,
                     metrics=metrics,
-                    knowledge_sections=hazard_sections,
+                    knowledge_sections=combined_knowledge,
                     conversation_history=conversation_history,
                 )
             
@@ -381,14 +406,14 @@ async def handle_webhook(
             response_text = await council_service.answer_question(
                 question=incoming_text,
                 metrics=metrics,
-                knowledge_sections=hazard_sections,
+                knowledge_sections=combined_knowledge,
                 conversation_history=conversation_history,
             )
         elif gemini_service:
             response_text = await gemini_service.answer_question(
                 question=incoming_text,
                 metrics=metrics,
-                knowledge_sections=hazard_sections,
+                knowledge_sections=combined_knowledge,
                 conversation_history=conversation_history,
             )
         else:
