@@ -32,3 +32,4 @@ DEFAULT_METRICS_YEARS_BACK = 5  # Years of historical data to fetch for LLM anal
 DEFAULT_MAX_ROWS_FOR_LLM = 10000  # Maximum rows to fetch for LLM analysis
 
 
+

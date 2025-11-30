@@ -31,3 +31,7 @@ CREATE POLICY "Service role can manage bot_queries_log"
 GRANT ALL ON public.bot_queries_log TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.bot_queries_log_id_seq TO service_role;
 
+
+
+
+
