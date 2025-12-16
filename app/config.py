@@ -28,6 +28,7 @@ class Settings(BaseModel):
     bot_display_name: str = DEFAULT_BOT_DISPLAY_NAME
     gemini_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
 
 
 @lru_cache
@@ -55,6 +56,7 @@ def get_settings() -> Settings:
             bot_display_name=os.getenv("BOT_DISPLAY_NAME", DEFAULT_BOT_DISPLAY_NAME),
             gemini_api_key=_optional_env("GEMINI_API_KEY", credentials),
             openrouter_api_key=_optional_env("OPENROUTER_API_KEY", credentials),
+            openai_api_key=_optional_env("OPENAI_API_KEY", credentials),
         )
     except (ValidationError, KeyError) as exc:
         missing = ", ".join(sorted(_missing_keys()))
@@ -108,6 +110,7 @@ def _optional_env(name: str, credentials: dict[str, str] | None = None) -> Optio
         "GEMINI_API_KEY": "gemini_api_key",
         "GREEN_API_WEBHOOK_TOKEN": "green_api_webhook_token",
         "OPENROUTER_API_KEY": "openrouter_api_key",
+        "OPENAI_API_KEY": "openai_api_key",
     }
     return os.getenv(name) or credentials.get(key_map.get(name, name.lower()))
 

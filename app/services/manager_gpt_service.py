@@ -1,32 +1,37 @@
 """
-Manager GPT service for handling manager-specific questions via OpenAI/OpenRouter API.
+Manager GPT service for handling manager-specific questions via Google Gemini API.
 Routes questions to a specialized ChatGPT GPT for management queries.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from typing import Any
 
-import httpx
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
 # ChatGPT GPT URL provided by user
 MANAGER_GPT_URL = "https://chatgpt.com/g/g-693fcca05a348191b116de2a699902c7-mrkhb-bvdh-nyhvly-pytvkh-tpysh-nyhvl-tsmy-vhvblh"
 
+DEFAULT_MODEL = "gemini-2.5-flash"
+
 
 class ManagerGPTService:
     """
-    Service for routing manager questions to ChatGPT GPT via OpenRouter API.
-    Uses GPT-4o model with manager-specific system instructions.
+    Service for routing manager questions to ChatGPT GPT via Google Gemini API.
+    Uses Gemini model with manager-specific system instructions.
     """
 
-    def __init__(self, api_key: str, model: str = "openai/gpt-4o") -> None:
+    def __init__(self, api_key: str, model: str = DEFAULT_MODEL) -> None:
         if not api_key:
-            raise ValueError("OpenRouter API key is required for Manager GPT service")
-        self._api_key = api_key
-        self._api_url = "https://openrouter.ai/api/v1/chat/completions"
+            raise ValueError("Gemini API key is required for Manager GPT service")
+        os.environ.setdefault("GEMINI_API_KEY", api_key)
+        self._client = genai.Client(api_key=api_key)
         self._model = model
 
     async def answer_manager_question(
@@ -35,7 +40,7 @@ class ManagerGPTService:
         timeout: float = 120.0,
     ) -> str:
         """
-        Answer a manager question using ChatGPT GPT via OpenRouter.
+        Answer a manager question using ChatGPT GPT via Google Gemini API.
         
         Args:
             question: The manager's question
@@ -45,54 +50,37 @@ class ManagerGPTService:
             The response from the GPT model
         """
         system_instruction = self._get_manager_system_instruction()
-        
-        messages = [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": question},
-        ]
 
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": MANAGER_GPT_URL,  # Reference to the GPT
-        }
-
-        payload = {
-            "model": self._model,
-            "messages": messages,
-        }
+        def _call() -> str:
+            config = types.GenerateContentConfig(
+                system_instruction=system_instruction,
+            )
+            
+            response = self._client.models.generate_content(
+                model=self._model,
+                contents=question,
+                config=config,
+            )
+            
+            if not response or not hasattr(response, 'text') or not response.text:
+                logger.warning("Empty response from Manager GPT")
+                return "מצטער, לא קיבלתי תשובה מהמערכת. אנא נסה שוב."
+            
+            content = response.text.strip()
+            
+            # Limit response to 4 lines as per user requirement
+            lines = [line.strip() for line in content.split("\n") if line.strip()]
+            if len(lines) > 4:
+                # Take first 4 non-empty lines
+                content = "\n".join(lines[:4])
+            else:
+                content = "\n".join(lines)
+            
+            return content
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(
-                    self._api_url, headers=headers, json=payload
-                )
-                response.raise_for_status()
-
-                data = response.json()
-                message = data["choices"][0]["message"]
-                content = message.get("content", "").strip()
-
-                if not content:
-                    logger.warning("Empty response from Manager GPT")
-                    return "מצטער, לא קיבלתי תשובה מהמערכת. אנא נסה שוב."
-
-                # Limit response to 4 lines as per user requirement
-                lines = [line.strip() for line in content.split("\n") if line.strip()]
-                if len(lines) > 4:
-                    # Take first 4 non-empty lines
-                    content = "\n".join(lines[:4])
-                else:
-                    content = "\n".join(lines)
-
-                return content
-
-        except httpx.TimeoutException:
-            logger.error("Timeout calling Manager GPT service")
-            return "מצטער, התשובה לוקחת יותר מדי זמן. אנא נסה שוב מאוחר יותר."
-        except httpx.HTTPStatusError as e:
-            logger.error("HTTP error calling Manager GPT: %s", e.response.status_code)
-            return "מצטער, אירעה שגיאה בקבלת תשובה מהמערכת. אנא נסה שוב מאוחר יותר."
+            content = await asyncio.to_thread(_call)
+            return content
         except Exception as e:
             logger.error("Error calling Manager GPT service: %s", e, exc_info=True)
             return "מצטער, אירעה שגיאה בקבלת תשובה מהמערכת. אנא נסה שוב מאוחר יותר."

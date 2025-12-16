@@ -67,19 +67,19 @@ async def lifespan(application: FastAPI):
         application.state.council_service = None
         logger.info("Council service not available (OPENROUTER_API_KEY not set)")
     
-    # Initialize Manager GPT Service
-    if settings.openrouter_api_key:
+    # Initialize Manager GPT Service (use Gemini API)
+    if settings.gemini_api_key:
         try:
             application.state.manager_gpt_service = ManagerGPTService(
-                api_key=settings.openrouter_api_key,
+                api_key=settings.gemini_api_key,
             )
-            logger.info("Manager GPT service initialized with OpenRouter API")
+            logger.info("Manager GPT service initialized with Gemini API")
         except Exception as e:
             logger.error("Failed to initialize Manager GPT service: %s", e)
             application.state.manager_gpt_service = None
     else:
         application.state.manager_gpt_service = None
-        logger.info("Manager GPT service not available (OPENROUTER_API_KEY not set)")
+        logger.info("Manager GPT service not available (GEMINI_API_KEY not set)")
 
     try:
         yield
