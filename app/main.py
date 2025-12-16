@@ -22,6 +22,7 @@ from app.services.greenapi_client import GreenAPIClient
 from app.services.intent_engine import IntentEngine
 from app.services.supabase_client import SupabaseService
 from app.services.container_status import ContainerStatusService
+from app.services.manager_gpt_service import ManagerGPTService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -65,6 +66,20 @@ async def lifespan(application: FastAPI):
     else:
         application.state.council_service = None
         logger.info("Council service not available (OPENROUTER_API_KEY not set)")
+    
+    # Initialize Manager GPT Service
+    if settings.openrouter_api_key:
+        try:
+            application.state.manager_gpt_service = ManagerGPTService(
+                api_key=settings.openrouter_api_key,
+            )
+            logger.info("Manager GPT service initialized with OpenRouter API")
+        except Exception as e:
+            logger.error("Failed to initialize Manager GPT service: %s", e)
+            application.state.manager_gpt_service = None
+    else:
+        application.state.manager_gpt_service = None
+        logger.info("Manager GPT service not available (OPENROUTER_API_KEY not set)")
 
     try:
         yield

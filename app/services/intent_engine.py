@@ -123,6 +123,12 @@ class IntentEngine:
 
     CONTAINER_ID_PATTERN = re.compile(r"\b([A-Z]{4}\d{7}|\d{9,12})\b", re.IGNORECASE)
 
+    MANAGER_QUESTION_PATTERNS = (
+        re.compile(r"^אני\s+מנהל", re.IGNORECASE),
+        re.compile(r"^I\s+am\s+a\s+manager", re.IGNORECASE),
+        re.compile(r"^I'm\s+a\s+manager", re.IGNORECASE),
+    )
+
     def match(self, text: str) -> IntentResult | None:
         import logging
         logger = logging.getLogger(__name__)
@@ -132,6 +138,14 @@ class IntentEngine:
             return None
 
         logger.info("Matching intent for text: %s (length: %d)", stripped, len(stripped))
+
+        # Check for manager questions first (high priority)
+        for pattern in self.MANAGER_QUESTION_PATTERNS:
+            if pattern.match(stripped):
+                return IntentResult(
+                    name="manager_question",
+                    parameters={"question": stripped},
+                )
 
         for pattern in self.DAILY_CONTAINER_PATTERNS:
             if pattern.search(stripped):

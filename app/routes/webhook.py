@@ -38,6 +38,7 @@ from app.services.greenapi_client import GreenAPIClient, GreenAPIQuotaExceededEr
 from app.services.hazard_knowledge import HazardKnowledgeBase
 from app.services.topic_knowledge import TopicKnowledgeBase
 from app.services.container_status import ContainerStatusService
+from app.services.manager_gpt_service import ManagerGPTService
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,12 @@ def get_container_status_service() -> ContainerStatusService | None:
     return getattr(app.state, "container_status_service", None)
 
 
+def get_manager_gpt_service() -> ManagerGPTService | None:
+    from app.main import app
+
+    return getattr(app.state, "manager_gpt_service", None)
+
+
 @router.post(
     "/webhook",
     status_code=status.HTTP_200_OK,
@@ -178,6 +185,7 @@ async def handle_webhook(
     hazard_knowledge: HazardKnowledgeBase | None = Depends(get_hazard_knowledge),
     topic_knowledge: TopicKnowledgeBase | None = Depends(get_topic_knowledge),
     container_status_service: ContainerStatusService | None = Depends(get_container_status_service),
+    manager_gpt_service: ManagerGPTService | None = Depends(get_manager_gpt_service),
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Depends(get_webhook_token),
 ) -> Response:
@@ -441,6 +449,20 @@ async def handle_webhook(
             logger.info("Fetching container status for %s across all ports", container_id)
             statuses = await container_status_service.lookup(container_id)
             response_text = build_container_status_response(container_id, statuses)
+    elif intent.name == "manager_question":
+        question = str(intent.parameters["question"])
+        if not manager_gpt_service:
+            logger.warning("Manager GPT service not available, using fallback")
+            response_text = build_fallback_response()
+        else:
+            logger.info("Routing manager question to Manager GPT: %s", question)
+            try:
+                response_text = await manager_gpt_service.answer_manager_question(question)
+                if not response_text or not response_text.strip():
+                    response_text = build_fallback_response()
+            except Exception as e:
+                logger.error("Error calling Manager GPT service: %s", e, exc_info=True)
+                response_text = build_fallback_response()
     else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Intent not implemented"
