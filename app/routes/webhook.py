@@ -45,6 +45,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/green", tags=["green-api"])
 
 
+# Static template mappings for short codes (e.g., WhatsApp quick replies)
+SWE_TEMPLATE_MAP: dict[str, str] = {
+    # Example: total containers handled in 2024
+    "{{SWE001}}": "כמה מכולות הנמל שינע בשנת 2024?",
+}
+
+
 async def send_message_with_error_handling(
     client: GreenAPIClient, chat_id: str, message: str, 
     supabase_service: SupabaseService | None = None,
@@ -231,6 +238,13 @@ async def handle_webhook(
     if not incoming_text:
         logger.warning("Received text message with no text payload for chat %s", chat_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # Map short template codes (like {{SWE001}}) to full user-facing questions
+    original_text = incoming_text
+    mapped_text = SWE_TEMPLATE_MAP.get(incoming_text.strip())
+    if mapped_text:
+        logger.info("Mapped template code '%s' to full question: %s", original_text, mapped_text)
+        incoming_text = mapped_text
 
     logger.info("Received message from %s: %s", chat_id, incoming_text)
     intent: IntentResult | None = intent_engine.match(incoming_text)

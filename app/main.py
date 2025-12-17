@@ -15,7 +15,6 @@ from app.config import get_settings
 from app.constants import VERSION, APP_NAME, DEFAULT_BOT_DISPLAY_NAME
 from app.routes import webhook
 from app.services.gemini_client import GeminiService
-from app.services.council_client import CouncilService
 from app.services.hazard_knowledge import HazardKnowledgeBase
 from app.services.topic_knowledge import TopicKnowledgeBase
 from app.services.greenapi_client import GreenAPIClient
@@ -57,15 +56,10 @@ async def lifespan(application: FastAPI):
     else:
         application.state.gemini_service = None
     
-    # Initialize Council Service (preferred over Gemini for multi-model responses)
-    if settings.openrouter_api_key:
-        application.state.council_service = CouncilService(
-            api_key=settings.openrouter_api_key,
-        )
-        logger.info("Council service initialized with OpenRouter API")
-    else:
-        application.state.council_service = None
-        logger.info("Council service not available (OPENROUTER_API_KEY not set)")
+    # Disable Council Service (OpenRouter-based multi-model) to avoid 404/402 errors
+    # All non-intent questions will use Gemini (if configured) or a simple fallback.
+    application.state.council_service = None
+    logger.info("Council service disabled (using Gemini or fallback only)")
     
     # Initialize Manager GPT Service (use Gemini API)
     if settings.gemini_api_key:
