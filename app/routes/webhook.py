@@ -47,8 +47,9 @@ router = APIRouter(prefix="/api/green", tags=["green-api"])
 
 # Static template mappings for short codes (e.g., WhatsApp quick replies)
 SWE_TEMPLATE_MAP: dict[str, str] = {
-    # Example: total containers handled in 2024
-    "{{SWE001}}": "כמה מכולות הנמל שינע בשנת 2024?",
+    # SWE001: monthly container count for a specific month (here: January 2024)
+    # This is mapped to a wording that our monthly intent reliably recognizes.
+    "{{SWE001}}": "כמה מכולות הנמל עשה בינואר 2024",
 }
 
 
