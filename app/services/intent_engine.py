@@ -121,6 +121,12 @@ class IntentEngine:
         re.compile(r"\bMISMHOLA\b", re.IGNORECASE),
     )
 
+    # Generic container-related questions (fallback to Gemini with metrics)
+    CONTAINER_GENERIC_PATTERNS = (
+        re.compile(r"\bמכול", re.IGNORECASE),          # כל מופע של "מכול" / "מכולות" / "מכולה"
+        re.compile(r"\bcontainer[s]?\b", re.IGNORECASE),
+    )
+
     CONTAINER_ID_PATTERN = re.compile(r"\b([A-Z]{4}\d{7}|\d{9,12})\b", re.IGNORECASE)
 
     MANAGER_QUESTION_PATTERNS = (
@@ -211,6 +217,15 @@ class IntentEngine:
                 if dates:
                     params.update(dates)
                 return IntentResult(name="llm_analysis", parameters=params)
+
+        # Any other container-related question that didn't match a specific intent
+        # will go through LLM analysis with metrics (Gemini "מדייק" את השאלה)
+        for pattern in self.CONTAINER_GENERIC_PATTERNS:
+            if pattern.search(stripped):
+                return IntentResult(
+                    name="llm_analysis",
+                    parameters={"question": stripped},
+                )
 
         for pattern in self.CONTAINER_STATUS_PATTERNS:
             if pattern.search(stripped):
