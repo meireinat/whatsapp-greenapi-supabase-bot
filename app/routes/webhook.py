@@ -5,6 +5,7 @@ HTTP routes that integrate with the Green API webhook flow.
 from __future__ import annotations
 
 import logging
+import datetime as dt
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -43,6 +44,56 @@ from app.services.manager_gpt_service import ManagerGPTService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/green", tags=["green-api"])
+
+
+# Greeting configuration
+GREETING_TEXT = "שלום אני בוט נמלי"
+NEW_CONVERSATION_THRESHOLD_SECONDS = 60 * 60  # 1 hour
+
+
+# Determine whether we should treat this message as the start of a new conversation
+def _should_add_greeting(conversation_history: list[dict] | None) -> bool:
+    """
+    Returns True if this looks like the first message in a new conversation
+    (no history, or last message was more than NEW_CONVERSATION_THRESHOLD_SECONDS ago).
+    """
+    try:
+        if not conversation_history:
+            # No history at all -> definitely a new conversation
+            return True
+
+        last_entry = conversation_history[-1]
+        created_at = last_entry.get("created_at")
+        if not created_at:
+            return False
+
+        # Supabase timestamps are ISO strings, often with 'Z' suffix
+        created_str = str(created_at)
+        if created_str.endswith("Z"):
+            created_str = created_str.replace("Z", "+00:00")
+
+        last_dt = dt.datetime.fromisoformat(created_str)
+        if last_dt.tzinfo is None:
+            # Assume UTC if timezone is not present
+            last_dt = last_dt.replace(tzinfo=dt.timezone.utc)
+
+        now_utc = dt.datetime.now(dt.timezone.utc)
+        diff_seconds = (now_utc - last_dt).total_seconds()
+        return diff_seconds > NEW_CONVERSATION_THRESHOLD_SECONDS
+    except Exception as e:
+        logger.error("Failed to determine if greeting is needed: %s", e, exc_info=True)
+        return False
+
+
+def _maybe_prefix_greeting(
+    response_text: str, conversation_history: list[dict] | None
+) -> str:
+    """
+    Prefix the response with a standard greeting if this is a new conversation.
+    """
+    if _should_add_greeting(conversation_history):
+        return f"{GREETING_TEXT}\n{response_text}"
+    return response_text
 
 
 # Static template mappings for short codes (e.g., WhatsApp quick replies)
@@ -286,7 +337,6 @@ async def handle_webhook(
     if not intent:
         logger.info("No intent matched, using Council/Gemini or fallback")
         # Prefer Council service (multi-model with ranking) over Gemini
-        import datetime as dt
         end_date = dt.date.today()
         start_date = dt.date(end_date.year - DEFAULT_METRICS_YEARS_BACK, 1, 1)
         metrics = supabase_service.get_metrics_summary(
@@ -335,6 +385,9 @@ async def handle_webhook(
         if not response_text or not response_text.strip():
             logger.warning("Response is empty after all attempts, using fallback")
             response_text = build_fallback_response()
+
+        # Add greeting prefix if this is a new conversation
+        response_text = _maybe_prefix_greeting(response_text, conversation_history)
         
         background_tasks.add_task(
             send_message_with_error_handling,
@@ -482,6 +535,9 @@ async def handle_webhook(
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Intent not implemented"
         )
+
+    # Add greeting prefix if this is a new conversation
+    response_text = _maybe_prefix_greeting(response_text, conversation_history)
 
     logger.info("=== PREPARING RESPONSE ===")
     logger.info("Chat ID: %s, Response length: %d chars", chat_id, len(response_text))
