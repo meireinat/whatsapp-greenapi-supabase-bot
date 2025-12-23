@@ -248,6 +248,9 @@ async def handle_webhook(
     authorization: str | None = Header(default=None),
     webhook_token: str | None = Depends(get_webhook_token),
 ) -> Response:
+    # Ensure datetime alias is available inside the function scope (avoids shadowing issues)
+    import datetime as dt
+
     logger.info("=== WEBHOOK RECEIVED ===")
     logger.info("Type: %s, HasAuth: %s, Timestamp: %s", 
                 getattr(payload, 'typeWebhook', 'unknown'),
