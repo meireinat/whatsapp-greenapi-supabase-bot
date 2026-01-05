@@ -122,7 +122,11 @@ def get_manager_gpt_service() -> ManagerGPTService | None:
 
 def get_notebooklm_client() -> NotebookLMClient:
     """Get or create NotebookLM client."""
-    return NotebookLMClient()
+    from app.config import get_settings
+    settings = get_settings()
+    # Try to use Gemini API key if available (for NotebookLM Enterprise)
+    api_key = getattr(settings, "gemini_api_key", None)
+    return NotebookLMClient(api_key=api_key)
 
 
 def get_version() -> str:

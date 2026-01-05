@@ -71,7 +71,7 @@ class NotebookLMClient:
         self, question: str, gemini_service: Any | None = None
     ) -> str:
         """
-        Try to query NotebookLM, and if that fails, use Gemini with a prompt
+        Try to query NotebookLM directly, and if that fails, use Gemini with a prompt
         that references the NotebookLM context.
         
         Args:
@@ -83,13 +83,24 @@ class NotebookLMClient:
         """
         result = await self.query(question)
         
-        if not result.get("success") and gemini_service:
-            # Use Gemini with a prompt that mentions NotebookLM
-            logger.info("Using Gemini fallback with NotebookLM context reference")
-            
-            # This would need to be integrated with the existing Gemini service
-            # For now, return the manual access message
-            return result.get("message", "למידע נוסף, אנא בדוק ב-NotebookLM.")
+        if result.get("success"):
+            # Successfully got response from NotebookLM
+            return result.get("response") or result.get("message", "")
+        
+        # If NotebookLM query failed, try using Gemini with NotebookLM context
+        if gemini_service:
+            logger.info("NotebookLM query failed, using Gemini with NotebookLM context reference")
+            try:
+                # Use Gemini to answer with reference to NotebookLM
+                notebook_url = result.get("notebook_url", "")
+                gemini_response = await gemini_service.answer_question(
+                    question=f"{question}\n\nהערה: אם התשובה לא נמצאת בקבצים המקומיים, אנא הפנה למשתמש לבדוק ב-NotebookLM: {notebook_url}",
+                    metrics={},
+                    knowledge_sections=None,
+                )
+                return gemini_response
+            except Exception as e:
+                logger.error("Gemini fallback failed: %s", e)
         
         return result.get("message", "לא ניתן לגשת ל-NotebookLM כרגע.")
 
