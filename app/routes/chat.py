@@ -1171,8 +1171,12 @@ async def chat_query(
             elif intent.name == "container_status_lookup":
                 container_id = intent.parameters.get("container_id")
                 if container_id and container_status_service:
-                    status_info = await container_status_service.get_container_status(container_id)
-                    response_text = build_container_status_response(container_id=container_id, status_info=status_info)
+                    try:
+                        statuses = await container_status_service.lookup(container_id)
+                        response_text = build_container_status_response(container_id, statuses)
+                    except Exception as e:
+                        logger.error("Error getting container status: %s", e, exc_info=True)
+                        response_text = build_fallback_response()
                 else:
                     response_text = build_fallback_response()
             
