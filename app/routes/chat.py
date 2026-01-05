@@ -350,6 +350,57 @@ async def chat_page():
             visibility: visible;
             opacity: 1;
         }
+        
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            .send-button {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+            
+            .voice-button {
+                width: 44px;
+                height: 44px;
+                min-width: 44px;
+                min-height: 44px;
+                padding: 10px;
+            }
+            
+            .chat-input-container {
+                padding: 15px;
+                gap: 8px;
+            }
+            
+            .chat-input {
+                font-size: 14px;
+                padding: 10px 15px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .send-button {
+                padding: 8px 15px;
+                font-size: 12px;
+            }
+            
+            .voice-button {
+                width: 40px;
+                height: 40px;
+                min-width: 40px;
+                min-height: 40px;
+                padding: 8px;
+            }
+            
+            .chat-input-container {
+                padding: 12px;
+                gap: 6px;
+            }
+            
+            .chat-input {
+                font-size: 14px;
+                padding: 8px 12px;
+            }
+        }
     </style>
 </head>
 <body>
