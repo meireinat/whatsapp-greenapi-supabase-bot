@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.constants import VERSION, APP_NAME, DEFAULT_BOT_DISPLAY_NAME
-from app.routes import webhook
+from app.routes import webhook, chat
 from app.services.gemini_client import GeminiService
 from app.services.hazard_knowledge import HazardKnowledgeBase
 from app.services.topic_knowledge import TopicKnowledgeBase
@@ -130,4 +130,5 @@ async def health() -> dict[str, str]:
 
 
 app.include_router(webhook.router)
+app.include_router(chat.router)
 
