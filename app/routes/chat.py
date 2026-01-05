@@ -1179,7 +1179,6 @@ async def chat_page():
             recentQueriesPanel.classList.remove('open');
             sendMessage();
         };
-        } // End of initializeChat function
     </script>
 </body>
 </html>
