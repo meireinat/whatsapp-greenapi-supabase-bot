@@ -798,8 +798,12 @@ async def chat_page():
         const queriesList = document.getElementById('queriesList');
         
         toggleQueriesBtn.addEventListener('click', function() {
+            console.log('Toggle button clicked');
+            console.log('Panel element:', recentQueriesPanel);
             recentQueriesPanel.classList.toggle('open');
+            console.log('Panel classes:', recentQueriesPanel.classList.toString());
             if (recentQueriesPanel.classList.contains('open')) {
+                console.log('Loading recent queries...');
                 loadRecentQueries();
             }
         });
@@ -830,7 +834,6 @@ async def chat_page():
             
             queriesList.innerHTML = queries.map((query, index) => {
                 const escapedText = escapeHtml(query.user_text);
-                const safeText = escapedText.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
                 return `
                 <div class="query-item">
                     <div class="query-text">${escapedText}</div>
