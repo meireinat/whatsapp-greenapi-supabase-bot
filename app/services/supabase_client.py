@@ -1031,6 +1031,44 @@ class SupabaseService:
             )
             return []
 
+    def get_recent_queries(self, limit: int = 10) -> list[dict[str, Any]]:
+        """
+        Get recent queries from all users.
+        
+        Args:
+            limit: Maximum number of recent queries to return (default: 10)
+        
+        Returns:
+            List of recent queries with user_text, response_text, intent, and created_at
+        """
+        try:
+            url = f"{self._supabase_url}/rest/v1/bot_queries_log"
+            headers = {
+                "apikey": self._supabase_key,
+                "Authorization": f"Bearer {self._supabase_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation",
+            }
+            
+            params = {
+                "order": "created_at.desc",
+                "limit": str(limit),
+                "select": "id,user_text,response_text,intent,parameters,created_at",
+            }
+            
+            response = httpx.get(url, headers=headers, params=params, timeout=self._http_timeout)
+            response.raise_for_status()
+            
+            queries = response.json()
+            
+            logger.debug("Retrieved %d recent queries", len(queries))
+            
+            return queries
+            
+        except Exception as e:
+            logger.error("Failed to get recent queries: %s", e, exc_info=True)
+            return []
+
     def log_query(
         self,
         *,

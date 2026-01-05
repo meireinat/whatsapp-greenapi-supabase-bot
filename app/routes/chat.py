@@ -56,6 +56,20 @@ class ChatResponse(BaseModel):
     intent: str | None = None
 
 
+class RecentQuery(BaseModel):
+    """Model for recent query."""
+    id: int
+    user_text: str
+    response_text: str | None = None
+    intent: str | None = None
+    created_at: str
+
+
+class RecentQueriesResponse(BaseModel):
+    """Response model for recent queries."""
+    queries: list[RecentQuery]
+
+
 def get_intent_engine() -> IntentEngine:
     from app.main import app
     return getattr(app.state, "intent_engine", None)
@@ -351,6 +365,130 @@ async def chat_page():
             opacity: 1;
         }
         
+        .recent-queries-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 300px;
+            max-width: 90vw;
+            height: 100vh;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        .recent-queries-panel.open {
+            transform: translateX(0);
+        }
+        
+        .recent-queries-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .recent-queries-header h2 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .close-panel {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .query-item {
+            padding: 12px;
+            margin-bottom: 12px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .query-text {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 8px;
+            word-wrap: break-word;
+        }
+        
+        .query-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .query-action-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #667eea;
+            color: white;
+            transition: background 0.2s;
+        }
+        
+        .query-action-btn:hover {
+            background: #5568d3;
+        }
+        
+        .query-action-btn.copy {
+            background: #4caf50;
+        }
+        
+        .query-action-btn.copy:hover {
+            background: #45a049;
+        }
+        
+        .query-action-btn.edit {
+            background: #ff9800;
+        }
+        
+        .query-action-btn.edit:hover {
+            background: #f57c00;
+        }
+        
+        .toggle-queries-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .toggle-queries-btn:hover {
+            transform: scale(1.1);
+        }
+        
         /* Mobile responsive styles */
         @media (max-width: 768px) {
             .send-button {
@@ -400,6 +538,17 @@ async def chat_page():
                 font-size: 14px;
                 padding: 8px 12px;
             }
+            
+            .recent-queries-panel {
+                width: 100vw;
+            }
+            
+            .toggle-queries-btn {
+                width: 48px;
+                height: 48px;
+                bottom: 15px;
+                right: 15px;
+            }
         }
     </style>
 </head>
@@ -427,6 +576,16 @@ async def chat_page():
             <button id="voiceButton" class="voice-button" title="דיבור" type="button" aria-label="דיבור">🎤</button>
             <button id="sendButton" class="send-button">שלח</button>
         </div>
+    </div>
+    
+    <!-- Recent Queries Panel -->
+    <button id="toggleQueriesBtn" class="toggle-queries-btn" title="שאלות אחרונות">📋</button>
+    <div id="recentQueriesPanel" class="recent-queries-panel">
+        <div class="recent-queries-header">
+            <h2>10 שאלות אחרונות</h2>
+            <button class="close-panel" id="closePanelBtn">×</button>
+        </div>
+        <div id="queriesList"></div>
     </div>
     
     <script>
@@ -631,6 +790,93 @@ async def chat_page():
         
         // Focus input on load
         questionInput.focus();
+        
+        // Recent Queries Panel
+        const toggleQueriesBtn = document.getElementById('toggleQueriesBtn');
+        const recentQueriesPanel = document.getElementById('recentQueriesPanel');
+        const closePanelBtn = document.getElementById('closePanelBtn');
+        const queriesList = document.getElementById('queriesList');
+        
+        toggleQueriesBtn.addEventListener('click', function() {
+            recentQueriesPanel.classList.toggle('open');
+            if (recentQueriesPanel.classList.contains('open')) {
+                loadRecentQueries();
+            }
+        });
+        
+        closePanelBtn.addEventListener('click', function() {
+            recentQueriesPanel.classList.remove('open');
+        });
+        
+        async function loadRecentQueries() {
+            try {
+                const response = await fetch('/api/chat/recent-queries');
+                if (!response.ok) {
+                    throw new Error('Failed to load queries');
+                }
+                const data = await response.json();
+                displayQueries(data.queries);
+            } catch (error) {
+                console.error('Error loading recent queries:', error);
+                queriesList.innerHTML = '<p style="color: #999; text-align: center;">שגיאה בטעינת השאלות</p>';
+            }
+        }
+        
+        function displayQueries(queries) {
+            if (queries.length === 0) {
+                queriesList.innerHTML = '<p style="color: #999; text-align: center;">אין שאלות אחרונות</p>';
+                return;
+            }
+            
+            queriesList.innerHTML = queries.map((query, index) => {
+                const escapedText = escapeHtml(query.user_text);
+                const safeText = escapedText.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+                return `
+                <div class="query-item">
+                    <div class="query-text">${escapedText}</div>
+                    <div class="query-actions">
+                        <button class="query-action-btn copy" onclick="copyQuery(${index})">העתק</button>
+                        <button class="query-action-btn edit" onclick="editQuery(${index})">ערוך</button>
+                        <button class="query-action-btn" onclick="askAgain(${index})">שאל שוב</button>
+                    </div>
+                </div>
+            `;
+            }).join('');
+            
+            // Store queries in a global variable for button handlers
+            window.recentQueries = queries;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        window.copyQuery = function(index) {
+            const query = window.recentQueries[index];
+            navigator.clipboard.writeText(query.user_text).then(() => {
+                alert('השאלה הועתקה ללוח');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('שגיאה בהעתקה');
+            });
+        };
+        
+        window.editQuery = function(index) {
+            const query = window.recentQueries[index];
+            questionInput.value = query.user_text;
+            questionInput.focus();
+            recentQueriesPanel.classList.remove('open');
+        };
+        
+        window.askAgain = function(index) {
+            const query = window.recentQueries[index];
+            questionInput.value = query.user_text;
+            questionInput.focus();
+            recentQueriesPanel.classList.remove('open');
+            sendMessage();
+        };
     </script>
 </body>
 </html>
@@ -863,4 +1109,31 @@ async def chat_query(
         logger.error("Unexpected error in chat_query: %s", e, exc_info=True)
         error_message = f"מצטער, אירעה שגיאה בעיבוד השאלה. אנא נסה שוב מאוחר יותר."
         return ChatResponse(answer=error_message, intent=None)
+
+
+@router.get("/recent-queries", response_model=RecentQueriesResponse)
+async def get_recent_queries(
+    supabase_service: SupabaseService = Depends(get_supabase_service),
+) -> RecentQueriesResponse:
+    """Get the 10 most recent queries from the database."""
+    try:
+        queries = supabase_service.get_recent_queries(limit=10)
+        
+        # Convert to response model
+        recent_queries = []
+        for query in queries:
+            recent_queries.append(
+                RecentQuery(
+                    id=query.get("id", 0),
+                    user_text=query.get("user_text", ""),
+                    response_text=query.get("response_text"),
+                    intent=query.get("intent"),
+                    created_at=str(query.get("created_at", "")),
+                )
+            )
+        
+        return RecentQueriesResponse(queries=recent_queries)
+    except Exception as e:
+        logger.error("Error getting recent queries: %s", e, exc_info=True)
+        return RecentQueriesResponse(queries=[])
 
