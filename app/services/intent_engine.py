@@ -218,15 +218,8 @@ class IntentEngine:
                     params.update(dates)
                 return IntentResult(name="llm_analysis", parameters=params)
 
-        # Any other container-related question that didn't match a specific intent
-        # will go through LLM analysis with metrics (Gemini "מדייק" את השאלה)
-        for pattern in self.CONTAINER_GENERIC_PATTERNS:
-            if pattern.search(stripped):
-                return IntentResult(
-                    name="llm_analysis",
-                    parameters={"question": stripped},
-                )
-
+        # Check for container status lookup BEFORE generic container patterns
+        # (container status is more specific than generic container questions)
         for pattern in self.CONTAINER_STATUS_PATTERNS:
             if pattern.search(stripped):
                 container_id = self._extract_container_id(stripped)
@@ -243,6 +236,16 @@ class IntentEngine:
                 name="container_status_lookup",
                 parameters={"container_id": container_id},
             )
+
+        # Any other container-related question that didn't match a specific intent
+        # will go through LLM analysis with metrics (Gemini "מדייק" את השאלה)
+        # This should come AFTER container_status_lookup to avoid false matches
+        for pattern in self.CONTAINER_GENERIC_PATTERNS:
+            if pattern.search(stripped):
+                return IntentResult(
+                    name="llm_analysis",
+                    parameters={"question": stripped},
+                )
 
         logger.info("No intent matched for text: %s", stripped)
         return None
