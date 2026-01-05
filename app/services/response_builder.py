@@ -114,7 +114,8 @@ def build_container_status_response(
             error_msg = str(result.error)
             # For 403 errors, provide more helpful message
             if "403" in error_msg:
-                lines.append(f"• סיבה: האתר חוסם בקשות אוטומטיות. אנא בדוק ידנית דרך הקישור.")
+                lines.append(f"• סיבה: האתר חוסם בקשות אוטומטיות (Cloudflare protection).")
+                lines.append(f"• פתרון: לחץ על הקישור לעיל לבדיקה ידנית באתר הנמל.")
             else:
                 lines.append(f"• סיבה: {result.error}")
         if result.details:
