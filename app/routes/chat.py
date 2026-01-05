@@ -289,12 +289,9 @@ async def chat_page():
             flex-shrink: 0;
         }
         
-        .voice-button svg {
-            width: 20px;
-            height: 20px;
-            display: block;
-            fill: white;
-            flex-shrink: 0;
+        .voice-button {
+            font-size: 20px;
+            line-height: 1;
         }
         
         .voice-button:hover {
@@ -376,11 +373,7 @@ async def chat_page():
                 placeholder="הקלד את השאלה שלך כאן..."
                 autocomplete="off"
             />
-            <button id="voiceButton" class="voice-button" title="דיבור" type="button" aria-label="דיבור">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2ZM19 10V11C19 15.42 15.42 19 11 19H10V21H14V23H10H8V21H10V19C5.58 19 2 15.42 2 11V10H4V11C4 14.31 6.69 17 10 17C13.31 17 16 14.31 16 11V10H19Z" fill="white"/>
-                </svg>
-            </button>
+            <button id="voiceButton" class="voice-button" title="דיבור" type="button" aria-label="דיבור">🎤</button>
             <button id="sendButton" class="send-button">שלח</button>
         </div>
     </div>
