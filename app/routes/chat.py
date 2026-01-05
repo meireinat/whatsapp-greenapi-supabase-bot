@@ -1038,13 +1038,23 @@ async def chat_page():
                     loadRecentQueries();
                 }
             });
+            
+            // Also add mousedown event as backup
+            toggleQueriesBtn.addEventListener('mousedown', function(e) {
+                console.log('Toggle button mousedown');
+            });
         } else {
             console.error('Cannot set up toggle button - elements missing');
         }
         
-        closePanelBtn.addEventListener('click', function() {
-            recentQueriesPanel.classList.remove('open');
-        });
+        if (closePanelBtn && recentQueriesPanel) {
+            closePanelBtn.addEventListener('click', function() {
+                console.log('Close button clicked');
+                recentQueriesPanel.classList.remove('open');
+            });
+        } else {
+            console.error('Cannot set up close button - elements missing');
+        }
         
         async function loadRecentQueries() {
             // Show loading state
