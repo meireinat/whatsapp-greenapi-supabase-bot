@@ -296,6 +296,7 @@ async def chat_page():
         const sendButton = document.getElementById('sendButton');
         
         function addMessage(text, isUser) {
+            console.log('Adding message:', text, 'isUser:', isUser);
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
             
@@ -305,6 +306,7 @@ async def chat_page():
             
             messageDiv.appendChild(contentDiv);
             messagesContainer.appendChild(messageDiv);
+            console.log('Message added to DOM');
             
             // Remove welcome message if exists
             const welcomeMsg = messagesContainer.querySelector('.welcome-message');
@@ -353,6 +355,7 @@ async def chat_page():
             showLoading();
             
             try {
+                console.log('Sending request with question:', question);
                 const response = await fetch('/api/chat/query', {
                     method: 'POST',
                     headers: {
@@ -360,6 +363,8 @@ async def chat_page():
                     },
                     body: JSON.stringify({ question: question })
                 });
+                
+                console.log('Response status:', response.status, response.statusText);
                 
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -369,6 +374,7 @@ async def chat_page():
                 
                 const data = await response.json();
                 console.log('Response data:', data);
+                console.log('Response answer:', data.answer);
                 removeLoading();
                 
                 if (!data || !data.answer) {
@@ -376,12 +382,15 @@ async def chat_page():
                     throw new Error('תשובה לא תקינה מהשרת');
                 }
                 
+                console.log('Calling addMessage with:', data.answer);
                 addMessage(data.answer, false);
+                console.log('Message should be displayed now');
             } catch (error) {
                 removeLoading();
+                console.error('Error in sendMessage:', error);
+                console.error('Error stack:', error.stack);
                 const errorMsg = error.message || 'מצטער, אירעה שגיאה. אנא נסה שוב מאוחר יותר.';
                 addMessage(errorMsg, false);
-                console.error('Error:', error);
             } finally {
                 sendButton.disabled = false;
                 sendButton.textContent = 'שלח';
