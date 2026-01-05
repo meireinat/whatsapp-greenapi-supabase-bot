@@ -137,8 +137,11 @@ class IntentEngine:
 
     # Patterns for procedure/policy questions - should query NotebookLM
     PROCEDURE_QUESTION_PATTERNS = (
-        re.compile(r"\b(?:נהל|נהלים|תהליך|תהליכים|מדיניות|פרוצדורה|פרוצדורות)\b", re.IGNORECASE),
+        re.compile(r"\b(?:נהל|נהלים|נוהל|נוהלים|תהליך|תהליכים|מדיניות|פרוצדורה|פרוצדורות)\b", re.IGNORECASE),
         re.compile(r"\b(?:procedure|procedures|policy|policies|process|processes)\b", re.IGNORECASE),
+        # Pattern for "תור" with "נהל" or "נוהל" - more flexible
+        re.compile(r"\b(?:נהל|נהלים|נוהל|נוהלים)\b.*\b(?:תור|תורים)", re.IGNORECASE),
+        re.compile(r"\b(?:תור|תורים|עדיפות|עדיפויות)\b.*\b(?:נהל|נהלים|נוהל|נוהלים)", re.IGNORECASE),
         re.compile(r"\b(?:תור|תורים|עדיפות|עדיפויות)\b.*\b(?:נמל|אוניה|אוניות|מכולה|מכולות)", re.IGNORECASE),
         re.compile(r"(?:עקוף|עוקף|עוקפות|עוקפים|לעקוף|לעקף)", re.IGNORECASE),
         re.compile(r"\b(?:queue|queuing|priority|priorities)\b", re.IGNORECASE),
