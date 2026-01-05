@@ -473,10 +473,12 @@ async def chat_page():
             z-index: 1000;
             overflow-y: auto;
             padding: 20px;
+            display: block;
+            visibility: visible;
         }
         
         .recent-queries-panel.open {
-            transform: translateX(0);
+            transform: translateX(0) !important;
         }
         
         .recent-queries-header {
