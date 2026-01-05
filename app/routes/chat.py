@@ -1433,13 +1433,25 @@ async def chat_query(
             logger.error("Failed to log query to Supabase: %s", e, exc_info=True)
             # Don't fail the request if logging fails
         
-        # Check if this is a procedure question that should auto-open NotebookLM
+        # Check if this should auto-open NotebookLM
+        # All questions that are NOT quantity questions should open NotebookLM
         auto_open_url = None
         auto_open_question = None
-        if intent and intent.name == "procedure_question":
+        
+        # Define quantity-related intents (these should NOT redirect to NotebookLM)
+        quantity_intents = {
+            "daily_containers_count",
+            "containers_count_between",
+            "vehicles_count_between",
+            "containers_count_comparison",
+            "containers_count_monthly",
+        }
+        
+        # If no intent matched OR intent is not a quantity question, redirect to NotebookLM
+        if not intent or (intent.name not in quantity_intents):
             notebook_id = "66688b34-ca77-4097-8ac8-42ca8285681f"
             auto_open_url = f"https://notebooklm.google.com/notebook/{notebook_id}"
-            auto_open_question = intent.parameters.get("question", incoming_text)
+            auto_open_question = incoming_text
         
         return ChatResponse(
             answer=response_text, 
