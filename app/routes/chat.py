@@ -50,10 +50,19 @@ class ChatRequest(BaseModel):
     user_id: str | None = None  # Optional user ID for conversation history
 
 
+class Citation(BaseModel):
+    """Model for document citation."""
+    document_title: str | None = None
+    source_file: str | None = None
+    excerpt: str
+    section_id: str | None = None
+
+
 class ChatResponse(BaseModel):
     """Response model for chat queries."""
     answer: str
     intent: str | None = None
+    citations: list[Citation] | None = None
 
 
 class RecentQuery(BaseModel):
@@ -365,6 +374,55 @@ async def chat_page():
             opacity: 1;
         }
         
+        .citations {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .citations-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .citation-item {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        
+        .citation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .citation-document {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 14px;
+        }
+        
+        .citation-source {
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .citation-excerpt {
+            color: #555;
+            line-height: 1.5;
+            font-style: italic;
+            border-right: 3px solid #667eea;
+            padding-right: 10px;
+            margin-top: 8px;
+        }
+        
         .recent-queries-panel {
             position: fixed;
             top: 0;
@@ -671,8 +729,8 @@ async def chat_page():
             }
         });
         
-        function addMessage(text, isUser) {
-            console.log('Adding message:', text, 'isUser:', isUser);
+        function addMessage(text, isUser, citations = null) {
+            console.log('Adding message:', text, 'isUser:', isUser, 'citations:', citations);
             
             // Remove welcome message if exists (do this first)
             const welcomeMsg = messagesContainer.querySelector('.welcome-message');
@@ -689,6 +747,51 @@ async def chat_page():
             contentDiv.textContent = text;
             
             messageDiv.appendChild(contentDiv);
+            
+            // Add citations if available
+            if (citations && citations.length > 0 && !isUser) {
+                const citationsDiv = document.createElement('div');
+                citationsDiv.className = 'citations';
+                
+                const citationsTitle = document.createElement('div');
+                citationsTitle.className = 'citations-title';
+                citationsTitle.textContent = 'מקורות:';
+                citationsDiv.appendChild(citationsTitle);
+                
+                citations.forEach((citation, index) => {
+                    const citationItem = document.createElement('div');
+                    citationItem.className = 'citation-item';
+                    
+                    const citationHeader = document.createElement('div');
+                    citationHeader.className = 'citation-header';
+                    
+                    const documentName = document.createElement('div');
+                    documentName.className = 'citation-document';
+                    documentName.textContent = citation.document_title || citation.source_file || `מקור ${index + 1}`;
+                    citationHeader.appendChild(documentName);
+                    
+                    if (citation.source_file) {
+                        const sourceFile = document.createElement('div');
+                        sourceFile.className = 'citation-source';
+                        sourceFile.textContent = citation.source_file;
+                        citationHeader.appendChild(sourceFile);
+                    }
+                    
+                    citationItem.appendChild(citationHeader);
+                    
+                    if (citation.excerpt) {
+                        const excerpt = document.createElement('div');
+                        excerpt.className = 'citation-excerpt';
+                        excerpt.textContent = citation.excerpt;
+                        citationItem.appendChild(excerpt);
+                    }
+                    
+                    citationsDiv.appendChild(citationItem);
+                });
+                
+                messageDiv.appendChild(citationsDiv);
+            }
+            
             messagesContainer.appendChild(messageDiv);
             console.log('Message added to DOM, container has', messagesContainer.children.length, 'children');
             
@@ -765,7 +868,7 @@ async def chat_page():
                 }
                 
                 console.log('Calling addMessage with:', data.answer);
-                addMessage(data.answer, false);
+                addMessage(data.answer, false, data.citations);
                 console.log('Message should be displayed now');
             } catch (error) {
                 removeLoading();
@@ -960,6 +1063,19 @@ async def chat_query(
         
         response_text = ""
         intent_name = None
+        citations_list = []
+        
+        # Collect citations from knowledge sections
+        if knowledge_sections:
+            for section in knowledge_sections:
+                citations_list.append(
+                    Citation(
+                        document_title=section.get("document_title") or section.get("topic"),
+                        source_file=section.get("source_file"),
+                        excerpt=section.get("excerpt", ""),
+                        section_id=section.get("section_id"),
+                    )
+                )
         
         if not intent:
             logger.info("No intent matched, using Council/Gemini or fallback")
@@ -1109,7 +1225,10 @@ async def chat_query(
         
         logger.info("Chat response: %s", response_text[:200])
         
-        return ChatResponse(answer=response_text, intent=intent_name)
+        # Return citations only if we have knowledge sections
+        citations = citations_list if citations_list else None
+        
+        return ChatResponse(answer=response_text, intent=intent_name, citations=citations)
     except HTTPException:
         # Re-raise HTTP exceptions (like 400 Bad Request)
         raise
@@ -1117,7 +1236,7 @@ async def chat_query(
         # Catch any other unexpected errors
         logger.error("Unexpected error in chat_query: %s", e, exc_info=True)
         error_message = f"מצטער, אירעה שגיאה בעיבוד השאלה. אנא נסה שוב מאוחר יותר."
-        return ChatResponse(answer=error_message, intent=None)
+        return ChatResponse(answer=error_message, intent=None, citations=None)
 
 
 @router.get("/recent-queries", response_model=RecentQueriesResponse)
