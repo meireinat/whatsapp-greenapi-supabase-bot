@@ -957,11 +957,12 @@ async def chat_page():
                         return;
                     }
                     
-                    // Open NotebookLM with question in URL hash
-                    // We'll use a bookmarklet approach: pass question via URL hash
-                    const notebooklmUrlWithHash = data.auto_open_url + '#question=' + encodeURIComponent(question);
+                    // Open NotebookLM through helper page that will try to auto-fill
+                    const helperUrl = window.location.origin + '/api/chat/notebooklm-helper?url=' + 
+                        encodeURIComponent(data.auto_open_url) + '&question=' + 
+                        encodeURIComponent(question);
                     
-                    // Also copy to clipboard as backup
+                    // Copy question to clipboard as backup
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(question).then(function() {
                             console.log('Question copied to clipboard');
@@ -970,18 +971,8 @@ async def chat_page():
                         });
                     }
                     
-                    // Open NotebookLM
-                    const newWindow = window.open(notebooklmUrlWithHash, '_blank', 'noopener,noreferrer');
-                    
-                    if (newWindow) {
-                        // Show instructions to user
-                        setTimeout(function() {
-                            const bookmarkletCode = 'javascript:(function(){const q=location.hash.match(/question=([^&]+)/);if(q){const question=decodeURIComponent(q[1]);const inputs=document.querySelectorAll("textarea,div[contenteditable=\\"true\\"]");for(const inp of inputs){if(inp.offsetParent!==null){if(inp.tagName==="TEXTAREA"){inp.value=question;inp.dispatchEvent(new Event("input",{bubbles:true}));}else if(inp.contentEditable==="true"){inp.textContent=question;inp.dispatchEvent(new Event("input",{bubbles:true}));}break;}}setTimeout(()=>{const btn=document.querySelector("button[type=\\"submit\\"],button[aria-label*=\\"Send\\"],button[aria-label*=\\"שלח\\"]");if(btn)btn.click();},500);}})();';
-                            alert('השאלה הועתקה ל-clipboard. לחץ על Ctrl+V (או Cmd+V ב-Mac) ב-NotebookLM כדי להדביק את השאלה.\\n\\nאו הרץ את ה-bookmarklet הבא בדף NotebookLM:\\n' + bookmarkletCode);
-                        }, 500);
-                    } else {
-                        alert('נא לאפשר פתיחת חלונות חדשים בדפדפן כדי לפתוח את NotebookLM');
-                    }
+                    // Open helper page which will open NotebookLM and try to auto-fill
+                    window.open(helperUrl, '_blank', 'noopener,noreferrer');
                 }
             } catch (error) {
                 removeLoading();
@@ -1665,6 +1656,8 @@ async def notebooklm_helper(url: str, question: str):
             const notebooklmUrl = {json.dumps(notebooklm_url)};
             const question = {json.dumps(question)};
             
+            console.log('Opening NotebookLM with question:', question);
+            
             // Copy question to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {{
                 navigator.clipboard.writeText(question).then(function() {{
@@ -1676,7 +1669,115 @@ async def notebooklm_helper(url: str, question: str):
             
             // Open NotebookLM with question in URL hash
             const notebooklmUrlWithHash = notebooklmUrl + '#question=' + encodeURIComponent(question);
-            window.open(notebooklmUrlWithHash, '_blank', 'noopener,noreferrer');
+            const newWindow = window.open(notebooklmUrlWithHash, '_blank', 'noopener,noreferrer');
+            
+            if (newWindow) {{
+                // Wait for NotebookLM to load, then try to inject bookmarklet code
+                setTimeout(function() {{
+                    try {{
+                        // Try to execute bookmarklet in the new window
+                        // This will only work if same-origin, otherwise we'll use fallback
+                        const bookmarkletCode = `
+                            (function() {{
+                                const q = location.hash.match(/question=([^&]+)/);
+                                if (q) {{
+                                    const question = decodeURIComponent(q[1]);
+                                    console.log('Found question in hash:', question);
+                                    
+                                    function tryFillAndSend() {{
+                                        const inputs = document.querySelectorAll('textarea, div[contenteditable="true"]');
+                                        console.log('Found', inputs.length, 'input elements');
+                                        
+                                        for (const inp of inputs) {{
+                                            if (inp.offsetParent !== null && inp.offsetWidth > 0) {{
+                                                console.log('Filling input:', inp);
+                                                
+                                                if (inp.tagName === 'TEXTAREA' || inp.tagName === 'INPUT') {{
+                                                    inp.value = question;
+                                                    inp.focus();
+                                                    inp.dispatchEvent(new Event('input', {{ bubbles: true, cancelable: true }}));
+                                                    inp.dispatchEvent(new Event('change', {{ bubbles: true, cancelable: true }}));
+                                                }} else if (inp.contentEditable === 'true') {{
+                                                    inp.textContent = question;
+                                                    inp.focus();
+                                                    inp.dispatchEvent(new Event('input', {{ bubbles: true, cancelable: true }}));
+                                                }}
+                                                
+                                                console.log('Question filled:', question);
+                                                
+                                                // Try to find and click send button
+                                                setTimeout(function() {{
+                                                    const sendSelectors = [
+                                                        'button[type="submit"]',
+                                                        'button[aria-label*="Send"]',
+                                                        'button[aria-label*="שלח"]',
+                                                        'button[data-testid*="send"]'
+                                                    ];
+                                                    
+                                                    let sendButton = null;
+                                                    for (const selector of sendSelectors) {{
+                                                        const buttons = document.querySelectorAll(selector);
+                                                        for (const btn of buttons) {{
+                                                            if (btn.offsetParent !== null && !btn.disabled) {{
+                                                                sendButton = btn;
+                                                                break;
+                                                            }}
+                                                        }}
+                                                        if (sendButton) break;
+                                                    }}
+                                                    
+                                                    if (sendButton) {{
+                                                        console.log('Clicking send button');
+                                                        sendButton.click();
+                                                    }} else {{
+                                                        console.log('Send button not found');
+                                                    }}
+                                                }}, 1000);
+                                                
+                                                return true;
+                                            }}
+                                        }}
+                                        return false;
+                                    }}
+                                    
+                                    // Try immediately
+                                    if (tryFillAndSend()) {{
+                                        console.log('Question filled immediately');
+                                        return;
+                                    }}
+                                    
+                                    // If not found, wait and try again
+                                    let attempts = 0;
+                                    const maxAttempts = 20;
+                                    const interval = setInterval(function() {{
+                                        attempts++;
+                                        if (tryFillAndSend() || attempts >= maxAttempts) {{
+                                            clearInterval(interval);
+                                            if (attempts >= maxAttempts) {{
+                                                console.log('Could not find input field after', maxAttempts, 'attempts');
+                                                alert('השאלה הועתקה ל-clipboard. לחץ על Ctrl+V (או Cmd+V ב-Mac) ב-NotebookLM כדי להדביק את השאלה.');
+                                            }}
+                                        }}
+                                    }}, 500);
+                                }}
+                            }})();
+                        `;
+                        
+                        // Try to execute in new window (will fail due to CORS, but we try anyway)
+                        try {{
+                            newWindow.eval(bookmarkletCode);
+                            console.log('Bookmarklet code executed');
+                        }} catch (e) {{
+                            console.log('Cannot execute bookmarklet due to CORS:', e);
+                            // Fallback: show alert with instructions
+                            alert('השאלה הועתקה ל-clipboard. לחץ על Ctrl+V (או Cmd+V ב-Mac) ב-NotebookLM כדי להדביק את השאלה.\\n\\nאו לחץ על הקישור בדף ה-helper כדי להריץ את ה-bookmarklet.');
+                        }}
+                    }} catch (e) {{
+                        console.error('Error in NotebookLM auto-fill:', e);
+                        alert('השאלה הועתקה ל-clipboard. לחץ על Ctrl+V (או Cmd+V ב-Mac) ב-NotebookLM כדי להדביק את השאלה.');
+                    }}
+                }}, 3000); // Wait 3 seconds for NotebookLM to load
+            }}
         </script>
     </body>
     </html>
