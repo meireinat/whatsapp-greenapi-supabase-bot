@@ -541,7 +541,7 @@ async def chat_query(
                 year = intent.parameters.get("year")
                 if month and year:
                     try:
-                        count = supabase_service.get_monthly_container_count(month=month, year=year)
+                        count = supabase_service.get_containers_count_monthly(month=month, year=year)
                         response_text = build_monthly_containers_response(month=month, year=year, count=count)
                     except Exception as e:
                         logger.error("Error getting monthly container count: %s", e, exc_info=True)
