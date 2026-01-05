@@ -1,5 +1,16 @@
 # מדריך הגדרה - התחברות ל-NotebookLM Enterprise
 
+## הערה חשובה על Notebooks ציבוריים
+
+**גם אם ה-Notebook הוא public (ציבורי)**, גישה דרך API עדיין דורשת:
+- Google Cloud Project עם NotebookLM Enterprise מופעל
+- Authentication (אימות) דרך Google Cloud
+- Project Number
+
+**הבדל בין גישה דרך דפדפן לבין API:**
+- **דרך דפדפן**: אם ה-Notebook הוא public, כל מי שיש לו את הקישור יכול לגשת אליו (אחרי התחברות ל-Google)
+- **דרך API**: תמיד דורש NotebookLM Enterprise API עם authentication, גם אם ה-Notebook הוא public
+
 ## דרישות מוקדמות
 
 כדי להתחבר ל-NotebookLM Enterprise API, אתה צריך:
@@ -92,6 +103,12 @@ gcloud auth application-default login
 2. צור Notebook חדש
 3. העתק את ה-Notebook ID מה-URL
 4. הגדר אותו ב-`NOTEBOOKLM_NOTEBOOK_ID`
+
+**הערה על Notebooks ציבוריים:**
+- אם ה-Notebook הוא public, כל מי שיש לו את הקישור יכול לגשת אליו דרך דפדפן
+- אבל גישה דרך API עדיין דורשת NotebookLM Enterprise API עם authentication
+- כדי לבדוק אם Notebook הוא public, נסה לגשת אליו דרך דפדפן ללא התחברות
+- אם אתה רואה דף התחברות, ה-Notebook הוא private או דורש הרשאות
 
 ## בדיקת החיבור
 
