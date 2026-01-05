@@ -362,15 +362,23 @@ async def chat_page():
                 });
                 
                 if (!response.ok) {
-                    throw new Error('שגיאה בקבלת תשובה');
+                    const errorText = await response.text();
+                    console.error('API Error:', response.status, errorText);
+                    throw new Error(`שגיאה ${response.status}: ${errorText.substring(0, 100)}`);
                 }
                 
                 const data = await response.json();
                 removeLoading();
+                
+                if (!data || !data.answer) {
+                    throw new Error('תשובה לא תקינה מהשרת');
+                }
+                
                 addMessage(data.answer, false);
             } catch (error) {
                 removeLoading();
-                addMessage('מצטער, אירעה שגיאה. אנא נסה שוב מאוחר יותר.', false);
+                const errorMsg = error.message || 'מצטער, אירעה שגיאה. אנא נסה שוב מאוחר יותר.';
+                addMessage(errorMsg, false);
                 console.error('Error:', error);
             } finally {
                 sendButton.disabled = false;
@@ -414,167 +422,58 @@ async def chat_query(
     """
     import datetime as dt
     
-    incoming_text = request.question.strip()
-    if not incoming_text:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
-    
-    logger.info("Chat query received: %s", incoming_text)
-    
-    # Use user_id if provided, otherwise use a default
-    user_id = request.user_id or "web_user"
-    chat_id = f"{user_id}@web"
-    
-    # Match intent
-    intent: IntentResult | None = intent_engine.match(incoming_text)
-    logger.info("Intent matched: %s (parameters: %s)", intent.name if intent else "None", intent.parameters if intent else "None")
-    
-    # Get conversation history if user_id is provided
-    conversation_history = None
-    if request.user_id:
-        conversation_history = supabase_service.get_recent_user_queries(
-            user_phone=chat_id,
-            limit=MAX_CONVERSATION_HISTORY,
-            exclude_current=True,
-        )
-        if conversation_history:
-            logger.info("Retrieved %d previous queries for context", len(conversation_history))
-    
-    # Get knowledge sections
-    hazard_sections = (
-        hazard_knowledge.build_sections(incoming_text)
-        if hazard_knowledge and hazard_knowledge.is_available()
-        else None
-    )
-    
-    topic_sections = (
-        topic_knowledge.build_sections(incoming_text)
-        if topic_knowledge and topic_knowledge.is_available()
-        else None
-    )
-    
-    knowledge_sections = []
-    if hazard_sections:
-        knowledge_sections.extend(hazard_sections)
-    if topic_sections:
-        knowledge_sections.extend(topic_sections)
-    
-    combined_knowledge = knowledge_sections if knowledge_sections else None
-    
-    response_text = ""
-    intent_name = None
-    
-    if not intent:
-        logger.info("No intent matched, using Council/Gemini or fallback")
-        end_date = dt.date.today()
-        start_date = dt.date(end_date.year - DEFAULT_METRICS_YEARS_BACK, 1, 1)
-        metrics = supabase_service.get_metrics_summary(
-            start_date=start_date,
-            end_date=end_date,
-            max_rows=DEFAULT_MAX_ROWS_FOR_LLM,
+    try:
+        incoming_text = request.question.strip()
+        if not incoming_text:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
+        
+        logger.info("Chat query received: %s", incoming_text)
+        
+        # Use user_id if provided, otherwise use a default
+        user_id = request.user_id or "web_user"
+        chat_id = f"{user_id}@web"
+        
+        # Match intent
+        intent: IntentResult | None = intent_engine.match(incoming_text)
+        logger.info("Intent matched: %s (parameters: %s)", intent.name if intent else "None", intent.parameters if intent else "None")
+        
+        # Get conversation history if user_id is provided
+        conversation_history = None
+        if request.user_id:
+            conversation_history = supabase_service.get_recent_user_queries(
+                user_phone=chat_id,
+                limit=MAX_CONVERSATION_HISTORY,
+                exclude_current=True,
+            )
+            if conversation_history:
+                logger.info("Retrieved %d previous queries for context", len(conversation_history))
+        
+        # Get knowledge sections
+        hazard_sections = (
+            hazard_knowledge.build_sections(incoming_text)
+            if hazard_knowledge and hazard_knowledge.is_available()
+            else None
         )
         
-        try:
-            if council_service:
-                logger.info("Using Council service...")
-                response_text = await council_service.answer_question(
-                    question=incoming_text,
-                    metrics=metrics,
-                    knowledge_sections=combined_knowledge,
-                    conversation_history=conversation_history,
-                )
-            elif gemini_service:
-                logger.info("Using Gemini service...")
-                response_text = await gemini_service.answer_question(
-                    question=incoming_text,
-                    metrics=metrics,
-                    knowledge_sections=combined_knowledge,
-                    conversation_history=conversation_history,
-                )
-            else:
-                logger.info("No LLM service available, using fallback")
-                response_text = build_fallback_response()
-        except Exception as e:
-            logger.error("Error calling LLM service: %s", e, exc_info=True)
-            response_text = build_fallback_response()
+        topic_sections = (
+            topic_knowledge.build_sections(incoming_text)
+            if topic_knowledge and topic_knowledge.is_available()
+            else None
+        )
         
-        if not response_text or not response_text.strip():
-            response_text = build_fallback_response()
-    else:
-        intent_name = intent.name
+        knowledge_sections = []
+        if hazard_sections:
+            knowledge_sections.extend(hazard_sections)
+        if topic_sections:
+            knowledge_sections.extend(topic_sections)
         
-        # Handle different intents
-        if intent.name == "containers_count_monthly":
-            month = intent.parameters.get("month")
-            year = intent.parameters.get("year")
-            if month and year:
-                count = supabase_service.get_monthly_container_count(month=month, year=year)
-                response_text = build_monthly_containers_response(month=month, year=year, count=count)
-            else:
-                response_text = build_fallback_response()
+        combined_knowledge = knowledge_sections if knowledge_sections else None
         
-        elif intent.name == "containers_count_daily":
-            date = intent.parameters.get("date")
-            if date:
-                count = supabase_service.get_daily_container_count(date=date)
-                response_text = build_daily_containers_response(date=date, count=count)
-            else:
-                response_text = build_fallback_response()
+        response_text = ""
+        intent_name = None
         
-        elif intent.name == "containers_count_range":
-            start_date = intent.parameters.get("start_date")
-            end_date = intent.parameters.get("end_date")
-            if start_date and end_date:
-                count = supabase_service.get_container_count_range(start_date=start_date, end_date=end_date)
-                response_text = build_containers_range_response(start_date=start_date, end_date=end_date, count=count)
-            else:
-                response_text = build_fallback_response()
-        
-        elif intent.name == "containers_comparison":
-            start_date = intent.parameters.get("start_date")
-            end_date = intent.parameters.get("end_date")
-            if start_date and end_date:
-                count1 = supabase_service.get_container_count_range(
-                    start_date=start_date, end_date=start_date
-                )
-                count2 = supabase_service.get_container_count_range(
-                    start_date=end_date, end_date=end_date
-                )
-                response_text = build_comparison_containers_response(
-                    date1=start_date, count1=count1, date2=end_date, count2=count2
-                )
-            else:
-                response_text = build_fallback_response()
-        
-        elif intent.name == "vehicles_count_range":
-            start_date = intent.parameters.get("start_date")
-            end_date = intent.parameters.get("end_date")
-            if start_date and end_date:
-                count = supabase_service.get_vehicle_count_range(start_date=start_date, end_date=end_date)
-                response_text = build_vehicles_range_response(start_date=start_date, end_date=end_date, count=count)
-            else:
-                response_text = build_fallback_response()
-        
-        elif intent.name == "container_status_lookup":
-            container_id = intent.parameters.get("container_id")
-            if container_id and container_status_service:
-                status_info = await container_status_service.get_container_status(container_id)
-                response_text = build_container_status_response(container_id=container_id, status_info=status_info)
-            else:
-                response_text = build_fallback_response()
-        
-        elif intent.name == "manager_question":
-            question = intent.parameters.get("question", incoming_text)
-            if manager_gpt_service:
-                try:
-                    response_text = await manager_gpt_service.answer_manager_question(question=question)
-                except Exception as e:
-                    logger.error("Error calling Manager GPT service: %s", e, exc_info=True)
-                    response_text = build_fallback_response()
-            else:
-                response_text = build_fallback_response()
-        
-        elif intent.name == "llm_analysis":
-            # Route to Gemini for analysis
+        if not intent:
+            logger.info("No intent matched, using Council/Gemini or fallback")
             end_date = dt.date.today()
             start_date = dt.date(end_date.year - DEFAULT_METRICS_YEARS_BACK, 1, 1)
             metrics = supabase_service.get_metrics_summary(
@@ -583,28 +482,146 @@ async def chat_query(
                 max_rows=DEFAULT_MAX_ROWS_FOR_LLM,
             )
             
-            if gemini_service:
-                try:
+            try:
+                if council_service:
+                    logger.info("Using Council service...")
+                    response_text = await council_service.answer_question(
+                        question=incoming_text,
+                        metrics=metrics,
+                        knowledge_sections=combined_knowledge,
+                        conversation_history=conversation_history,
+                    )
+                elif gemini_service:
+                    logger.info("Using Gemini service...")
                     response_text = await gemini_service.answer_question(
                         question=incoming_text,
                         metrics=metrics,
                         knowledge_sections=combined_knowledge,
                         conversation_history=conversation_history,
                     )
-                except Exception as e:
-                    logger.error("Error calling Gemini service: %s", e, exc_info=True)
+                else:
+                    logger.info("No LLM service available, using fallback")
                     response_text = build_fallback_response()
+            except Exception as e:
+                logger.error("Error calling LLM service: %s", e, exc_info=True)
+                response_text = build_fallback_response()
+            
+            if not response_text or not response_text.strip():
+                response_text = build_fallback_response()
+        else:
+            intent_name = intent.name
+            
+            # Handle different intents
+            if intent.name == "containers_count_monthly":
+                month = intent.parameters.get("month")
+                year = intent.parameters.get("year")
+                if month and year:
+                    count = supabase_service.get_monthly_container_count(month=month, year=year)
+                    response_text = build_monthly_containers_response(month=month, year=year, count=count)
+                else:
+                    response_text = build_fallback_response()
+            
+            elif intent.name == "containers_count_daily":
+                date = intent.parameters.get("date")
+                if date:
+                    count = supabase_service.get_daily_container_count(date=date)
+                    response_text = build_daily_containers_response(date=date, count=count)
+                else:
+                    response_text = build_fallback_response()
+            
+            elif intent.name == "containers_count_range":
+                start_date = intent.parameters.get("start_date")
+                end_date = intent.parameters.get("end_date")
+                if start_date and end_date:
+                    count = supabase_service.get_container_count_range(start_date=start_date, end_date=end_date)
+                    response_text = build_containers_range_response(start_date=start_date, end_date=end_date, count=count)
+                else:
+                    response_text = build_fallback_response()
+            
+            elif intent.name == "containers_comparison":
+                start_date = intent.parameters.get("start_date")
+                end_date = intent.parameters.get("end_date")
+                if start_date and end_date:
+                    count1 = supabase_service.get_container_count_range(
+                        start_date=start_date, end_date=start_date
+                    )
+                    count2 = supabase_service.get_container_count_range(
+                        start_date=end_date, end_date=end_date
+                    )
+                    response_text = build_comparison_containers_response(
+                        date1=start_date, count1=count1, date2=end_date, count2=count2
+                    )
+                else:
+                    response_text = build_fallback_response()
+            
+            elif intent.name == "vehicles_count_range":
+                start_date = intent.parameters.get("start_date")
+                end_date = intent.parameters.get("end_date")
+                if start_date and end_date:
+                    count = supabase_service.get_vehicle_count_range(start_date=start_date, end_date=end_date)
+                    response_text = build_vehicles_range_response(start_date=start_date, end_date=end_date, count=count)
+                else:
+                    response_text = build_fallback_response()
+            
+            elif intent.name == "container_status_lookup":
+                container_id = intent.parameters.get("container_id")
+                if container_id and container_status_service:
+                    status_info = await container_status_service.get_container_status(container_id)
+                    response_text = build_container_status_response(container_id=container_id, status_info=status_info)
+                else:
+                    response_text = build_fallback_response()
+            
+            elif intent.name == "manager_question":
+                question = intent.parameters.get("question", incoming_text)
+                if manager_gpt_service:
+                    try:
+                        response_text = await manager_gpt_service.answer_manager_question(question=question)
+                    except Exception as e:
+                        logger.error("Error calling Manager GPT service: %s", e, exc_info=True)
+                        response_text = build_fallback_response()
+                else:
+                    response_text = build_fallback_response()
+            
+            elif intent.name == "llm_analysis":
+                # Route to Gemini for analysis
+                end_date = dt.date.today()
+                start_date = dt.date(end_date.year - DEFAULT_METRICS_YEARS_BACK, 1, 1)
+                metrics = supabase_service.get_metrics_summary(
+                    start_date=start_date,
+                    end_date=end_date,
+                    max_rows=DEFAULT_MAX_ROWS_FOR_LLM,
+                )
+                
+                if gemini_service:
+                    try:
+                        response_text = await gemini_service.answer_question(
+                            question=incoming_text,
+                            metrics=metrics,
+                            knowledge_sections=combined_knowledge,
+                            conversation_history=conversation_history,
+                        )
+                    except Exception as e:
+                        logger.error("Error calling Gemini service: %s", e, exc_info=True)
+                        response_text = build_fallback_response()
+                else:
+                    response_text = build_fallback_response()
+            
             else:
                 response_text = build_fallback_response()
-        
-        else:
+    
+        # Ensure we have a response
+        if not response_text or not response_text.strip():
             response_text = build_fallback_response()
-    
-    # Ensure we have a response
-    if not response_text or not response_text.strip():
-        response_text = build_fallback_response()
-    
-    logger.info("Chat response: %s", response_text[:200])
-    
-    return ChatResponse(answer=response_text, intent=intent_name)
+        
+        logger.info("Chat response: %s", response_text[:200])
+        
+        return ChatResponse(answer=response_text, intent=intent_name)
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 400 Bad Request)
+        raise
+    except Exception as e:
+        # Catch any other unexpected errors
+        logger.error("Unexpected error in chat_query: %s", e, exc_info=True)
+        error_message = f"מצטער, אירעה שגיאה בעיבוד השאלה. אנא נסה שוב מאוחר יותר."
+        return ChatResponse(answer=error_message, intent=None)
 
