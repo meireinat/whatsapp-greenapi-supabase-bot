@@ -374,6 +374,18 @@ async def chat_page():
             opacity: 1;
         }
         
+        .message-content a {
+            color: #667eea;
+            text-decoration: underline;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .message-content a:hover {
+            color: #5568d3;
+            text-decoration: none;
+        }
+        
         .citations {
             margin-top: 15px;
             padding-top: 15px;
@@ -744,7 +756,43 @@ async def chat_page():
             
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
-            contentDiv.textContent = text;
+            
+            // Convert markdown-style links [text](url) to HTML links safely
+            const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+            const parts = [];
+            let lastIndex = 0;
+            let match;
+            
+            while ((match = linkPattern.exec(text)) !== null) {
+                // Add text before the link
+                if (match.index > lastIndex) {
+                    const textNode = document.createTextNode(text.substring(lastIndex, match.index));
+                    parts.push(textNode);
+                }
+                
+                // Create link element
+                const link = document.createElement('a');
+                link.href = match[2];
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = match[1];
+                parts.push(link);
+                
+                lastIndex = match.index + match[0].length;
+            }
+            
+            // Add remaining text
+            if (lastIndex < text.length) {
+                const textNode = document.createTextNode(text.substring(lastIndex));
+                parts.push(textNode);
+            }
+            
+            // If no links found, just set text content
+            if (parts.length === 0) {
+                contentDiv.textContent = text;
+            } else {
+                parts.forEach(part => contentDiv.appendChild(part));
+            }
             
             messageDiv.appendChild(contentDiv);
             

@@ -97,7 +97,14 @@ def build_container_status_response(
 
     for result in results:
         status_emoji = "✅" if result.success else "⚠️"
-        lines.append(f"{status_emoji} {result.port_name} – {result.summary}")
+        port_line = f"{status_emoji} {result.port_name} – {result.summary}"
+        
+        # Add clickable URL if available
+        if result.url:
+            port_line += f" [פתח קישור]({result.url})"
+        
+        lines.append(port_line)
+        
         if result.error and not result.success:
             lines.append(f"• סיבה: {result.error}")
         if result.details:
