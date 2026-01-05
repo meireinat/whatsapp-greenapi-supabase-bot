@@ -1004,58 +1004,93 @@ async def chat_page():
         // Focus input on load
         questionInput.focus();
         
-        // Recent Queries Panel
-        const toggleQueriesBtn = document.getElementById('toggleQueriesBtn');
-        const recentQueriesPanel = document.getElementById('recentQueriesPanel');
-        const closePanelBtn = document.getElementById('closePanelBtn');
-        const queriesList = document.getElementById('queriesList');
-        
-        // Debug: Check if elements exist
-        if (!toggleQueriesBtn) {
-            console.error('toggleQueriesBtn not found!');
-        }
-        if (!recentQueriesPanel) {
-            console.error('recentQueriesPanel not found!');
-        }
-        if (!closePanelBtn) {
-            console.error('closePanelBtn not found!');
-        }
-        if (!queriesList) {
-            console.error('queriesList not found!');
-        }
-        
-        if (toggleQueriesBtn && recentQueriesPanel) {
-            toggleQueriesBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('Toggle button clicked');
-                const wasOpen = recentQueriesPanel.classList.contains('open');
-                recentQueriesPanel.classList.toggle('open');
-                console.log('Panel is now:', recentQueriesPanel.classList.contains('open') ? 'open' : 'closed');
-                
-                // Always reload queries when opening the panel (even if it was already open)
-                if (recentQueriesPanel.classList.contains('open')) {
-                    console.log('Loading recent queries from DB...');
-                    loadRecentQueries();
-                }
-            });
+        // Recent Queries Panel - Initialize after DOM is ready
+        function initQueriesPanel() {
+            const toggleQueriesBtn = document.getElementById('toggleQueriesBtn');
+            const recentQueriesPanel = document.getElementById('recentQueriesPanel');
+            const closePanelBtn = document.getElementById('closePanelBtn');
+            const queriesList = document.getElementById('queriesList');
             
-            // Also add mousedown event as backup
-            toggleQueriesBtn.addEventListener('mousedown', function(e) {
-                console.log('Toggle button mousedown');
-            });
-        } else {
-            console.error('Cannot set up toggle button - elements missing');
+            console.log('=== Initializing queries panel ===');
+            console.log('toggleQueriesBtn:', toggleQueriesBtn);
+            console.log('recentQueriesPanel:', recentQueriesPanel);
+            console.log('closePanelBtn:', closePanelBtn);
+            console.log('queriesList:', queriesList);
+            
+            // Debug: Check if elements exist
+            if (!toggleQueriesBtn) {
+                console.error('❌ toggleQueriesBtn not found!');
+                return;
+            }
+            if (!recentQueriesPanel) {
+                console.error('❌ recentQueriesPanel not found!');
+                return;
+            }
+            if (!closePanelBtn) {
+                console.error('❌ closePanelBtn not found!');
+            }
+            if (!queriesList) {
+                console.error('❌ queriesList not found!');
+            }
+            
+            if (toggleQueriesBtn && recentQueriesPanel) {
+                console.log('✅ Setting up toggle button event listener...');
+                
+                // Remove any existing listeners
+                const newToggleBtn = toggleQueriesBtn.cloneNode(true);
+                toggleQueriesBtn.parentNode.replaceChild(newToggleBtn, toggleQueriesBtn);
+                
+                // Add click event
+                newToggleBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔵 Toggle button CLICKED!');
+                    const wasOpen = recentQueriesPanel.classList.contains('open');
+                    recentQueriesPanel.classList.toggle('open');
+                    const isNowOpen = recentQueriesPanel.classList.contains('open');
+                    console.log('Panel state - was:', wasOpen, 'now:', isNowOpen);
+                    console.log('Panel element:', recentQueriesPanel);
+                    console.log('Panel classes:', recentQueriesPanel.className);
+                    console.log('Panel computed style:', window.getComputedStyle(recentQueriesPanel).transform);
+                    
+                    // Always reload queries when opening the panel
+                    if (isNowOpen) {
+                        console.log('📥 Loading recent queries from DB...');
+                        loadRecentQueries();
+                    }
+                });
+                
+                // Also add mousedown/touchstart as backup
+                newToggleBtn.addEventListener('mousedown', function(e) {
+                    console.log('🔵 Toggle button mousedown');
+                });
+                newToggleBtn.addEventListener('touchstart', function(e) {
+                    console.log('🔵 Toggle button touchstart');
+                });
+                
+                console.log('✅ Toggle button setup complete');
+            } else {
+                console.error('❌ Cannot set up toggle button - elements missing');
+            }
+            
+            if (closePanelBtn && recentQueriesPanel) {
+                closePanelBtn.addEventListener('click', function() {
+                    console.log('🔴 Close button clicked');
+                    recentQueriesPanel.classList.remove('open');
+                });
+            }
         }
         
-        if (closePanelBtn && recentQueriesPanel) {
-            closePanelBtn.addEventListener('click', function() {
-                console.log('Close button clicked');
-                recentQueriesPanel.classList.remove('open');
-            });
+        // Initialize immediately and also after DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initQueriesPanel);
         } else {
-            console.error('Cannot set up close button - elements missing');
+            // DOM already loaded
+            initQueriesPanel();
         }
+        
+        // Also try after a short delay as backup
+        setTimeout(initQueriesPanel, 500);
         
         async function loadRecentQueries() {
             // Show loading state
