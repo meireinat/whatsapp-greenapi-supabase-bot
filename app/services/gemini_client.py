@@ -93,8 +93,12 @@ class GeminiService:
                     "  If the question is about cargo types (metals, chemicals, etc.) and the excerpts are about different topics,\n"
                     "  do NOT cite them. Instead, clearly state that the specific information is not available in the database.\n"
                     "\n"
-                    "If the context lacks information required to answer accurately, "
-                    "state clearly what is missing instead of guessing."
+                    "If the context lacks information required to answer accurately:\n"
+                    "- State clearly what is missing instead of guessing\n"
+                    "- If the information is not available in the provided knowledge base excerpts or database,\n"
+                    "  suggest that the user check the NotebookLM knowledge base at:\n"
+                    "  https://notebooklm.google.com/notebook/66688b34-ca77-4097-8ac8-42ca8285681f\n"
+                    "- Format the suggestion as: 'למידע נוסף, אנא בדוק ב-NotebookLM: [קישור]'"
                 ),
                 temperature=0.3,
             )
