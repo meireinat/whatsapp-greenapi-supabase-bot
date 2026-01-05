@@ -133,61 +133,81 @@ class NotebookLMClient:
                 "notebook_url": f"{NOTEBOOKLM_BASE_URL}/notebook/{notebook_id}",
             }
         
-        # Build API URL
+        # Build API URL - try multiple endpoint patterns
         api_base = NOTEBOOKLM_API_BASE.format(endpoint_location=self._endpoint_location)
-        url = (
-            f"{api_base}/projects/{self._project_number}/locations/{self._location}/"
-            f"notebooks/{notebook_id}:query"
-        )
+        
+        # Try different endpoint patterns for querying
+        endpoints_to_try = [
+            f"{api_base}/projects/{self._project_number}/locations/{self._location}/notebooks/{notebook_id}:query",
+            f"{api_base}/projects/{self._project_number}/locations/{self._location}/notebooks/{notebook_id}/chat",
+            f"{api_base}/projects/{self._project_number}/locations/{self._location}/notebooks/{notebook_id}:chat",
+            f"{api_base}/projects/{self._project_number}/locations/{self._location}/notebooks/{notebook_id}/completions",
+        ]
         
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         }
         
-        payload = {
-            "query": question,
-        }
+        # Try different payload formats
+        payloads_to_try = [
+            {"query": question},
+            {"message": question},
+            {"prompt": question},
+            {"question": question},
+        ]
         
-        try:
-            logger.info("Querying NotebookLM Enterprise API: %s", url)
-            response = await self._client.post(url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                data = response.json()
-                response_text = data.get("response") or data.get("answer") or str(data)
-                return {
-                    "success": True,
-                    "response": response_text,
-                    "message": response_text,
-                    "sources": data.get("sources", []),
-                }
-            else:
-                logger.error(
-                    "NotebookLM Enterprise API error: %s - %s",
-                    response.status_code,
-                    response.text[:500],
-                )
-                return {
-                    "success": False,
-                    "error": f"API error: {response.status_code}",
-                    "message": (
-                        f"למידע נוסף, אנא בדוק ב-NotebookLM: "
-                        f"{NOTEBOOKLM_BASE_URL}/notebook/{notebook_id}"
-                    ),
-                    "notebook_url": f"{NOTEBOOKLM_BASE_URL}/notebook/{notebook_id}",
-                }
-        except Exception as e:
-            logger.error("NotebookLM Enterprise API query failed: %s", e, exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "message": (
-                    f"למידע נוסף, אנא בדוק ב-NotebookLM: "
-                    f"{NOTEBOOKLM_BASE_URL}/notebook/{notebook_id}"
-                ),
-                "notebook_url": f"{NOTEBOOKLM_BASE_URL}/notebook/{notebook_id}",
-            }
+        # Try each endpoint with each payload format
+        for url in endpoints_to_try:
+            for payload in payloads_to_try:
+                try:
+                    logger.info("Trying NotebookLM Enterprise API: %s with payload: %s", url, payload)
+                    response = await self._client.post(url, headers=headers, json=payload, timeout=self._timeout)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        response_text = data.get("response") or data.get("answer") or data.get("text") or str(data)
+                        logger.info("Successfully queried NotebookLM Enterprise API")
+                        return {
+                            "success": True,
+                            "response": response_text,
+                            "message": response_text,
+                            "sources": data.get("sources", []),
+                        }
+                    elif response.status_code == 404:
+                        # Endpoint not found, try next one
+                        logger.debug("Endpoint not found (404), trying next endpoint")
+                        continue
+                    else:
+                        # Log error but continue trying
+                        logger.debug(
+                            "NotebookLM Enterprise API error for %s: %s - %s",
+                            url,
+                            response.status_code,
+                            response.text[:200],
+                        )
+                        continue
+                except httpx.TimeoutException:
+                    logger.warning("Timeout for endpoint %s, trying next", url)
+                    continue
+                except Exception as e:
+                    logger.debug("Error trying endpoint %s: %s", url, e)
+                    continue
+        
+        # If all endpoints failed, return error
+        logger.error(
+            "All NotebookLM Enterprise API endpoints failed. Last tried: %s",
+            endpoints_to_try[-1],
+        )
+        return {
+            "success": False,
+            "error": "All API endpoints failed",
+            "message": (
+                f"למידע נוסף, אנא בדוק ב-NotebookLM: "
+                f"{NOTEBOOKLM_BASE_URL}/notebook/{notebook_id}"
+            ),
+            "notebook_url": f"{NOTEBOOKLM_BASE_URL}/notebook/{notebook_id}",
+        }
 
     async def try_query_with_gemini_fallback(
         self, question: str, gemini_service: Any | None = None
