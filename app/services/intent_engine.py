@@ -143,6 +143,8 @@ class IntentEngine:
         re.compile(r"\b(?:עקוף|עוקף|עוקפות|עוקפים)\b.*\b(?:תור|תורים)", re.IGNORECASE),
         re.compile(r"\b(?:queue|queuing|priority|priorities)\b", re.IGNORECASE),
         re.compile(r"\b(?:גרעינים|גרעין)\b.*\b(?:אוניה|אוניות|תור|עקוף)", re.IGNORECASE),
+        re.compile(r"\b(?:אוניה|אוניות|אוניית)\b.*\b(?:גרעינים|גרעין)\b.*\b(?:עקוף|תור)", re.IGNORECASE),
+        re.compile(r"\b(?:עקוף|עוקף|עוקפות|עוקפים)\b.*\b(?:תור|תורים).*\b(?:אוניה|אוניות)", re.IGNORECASE),
     )
 
     def match(self, text: str) -> IntentResult | None:
