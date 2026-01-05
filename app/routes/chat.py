@@ -124,9 +124,20 @@ def get_notebooklm_client() -> NotebookLMClient:
     """Get or create NotebookLM client."""
     from app.config import get_settings
     settings = get_settings()
-    # Try to use Gemini API key if available (for NotebookLM Enterprise)
+    # Use Gemini API key if available (for NotebookLM Enterprise authentication)
     api_key = getattr(settings, "gemini_api_key", None)
-    return NotebookLMClient(api_key=api_key)
+    project_number = getattr(settings, "google_cloud_project_number", None)
+    location = getattr(settings, "notebooklm_location", "global")
+    endpoint_location = getattr(settings, "notebooklm_endpoint_location", "global")
+    notebook_id = getattr(settings, "notebooklm_notebook_id", None)
+    
+    return NotebookLMClient(
+        api_key=api_key,
+        project_number=project_number,
+        location=location,
+        endpoint_location=endpoint_location,
+        notebook_id=notebook_id,
+    )
 
 
 def get_version() -> str:

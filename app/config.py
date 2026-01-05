@@ -29,6 +29,10 @@ class Settings(BaseModel):
     gemini_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    google_cloud_project_number: Optional[str] = None
+    notebooklm_location: str = "global"
+    notebooklm_endpoint_location: str = "global"
+    notebooklm_notebook_id: Optional[str] = None
 
 
 @lru_cache
@@ -57,6 +61,10 @@ def get_settings() -> Settings:
             gemini_api_key=_optional_env("GEMINI_API_KEY", credentials),
             openrouter_api_key=_optional_env("OPENROUTER_API_KEY", credentials),
             openai_api_key=_optional_env("OPENAI_API_KEY", credentials),
+            google_cloud_project_number=_optional_env("GOOGLE_CLOUD_PROJECT_NUMBER", credentials),
+            notebooklm_location=os.getenv("NOTEBOOKLM_LOCATION", "global"),
+            notebooklm_endpoint_location=os.getenv("NOTEBOOKLM_ENDPOINT_LOCATION", "global"),
+            notebooklm_notebook_id=_optional_env("NOTEBOOKLM_NOTEBOOK_ID", credentials),
         )
     except (ValidationError, KeyError) as exc:
         missing = ", ".join(sorted(_missing_keys()))
