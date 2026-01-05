@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 import re
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 from collections import Counter
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ class TopicKnowledgeBase:
         return chunks
 
     @staticmethod
-    def _extract_metadata(text: str) -> dict[str, any]:  # type: ignore
+    def _extract_metadata(text: str) -> dict[str, Any]:
         """
         Extract metadata from text: keywords, summary, and potential questions.
         """
