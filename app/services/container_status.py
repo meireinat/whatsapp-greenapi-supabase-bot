@@ -47,8 +47,18 @@ class ContainerStatusService:
 
     ASHDOD_HEADERS = {
         "User-Agent": CHROME_UA,
-        "Accept": "text/html,application/xhtml+xml",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer": "https://www.ashdodport.co.il/",
+        "Origin": "https://www.ashdodport.co.il",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
     }
 
     HAIFA_HEADERS = {
@@ -118,15 +128,22 @@ class ContainerStatusService:
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in {403, 429, 503}:
                 try:
+                    # Try with sync client first
                     html = await asyncio.to_thread(
                         self._get_ashdod_html_sync, container_id
                     )
-                except Exception as fallback_exc:  # pragma: no cover - best effort
-                    return self._build_error_result(
-                        "נמל אשדוד",
-                        self.ASHDOD_URL,
-                        fallback_exc,
-                    )
+                except Exception:
+                    # If sync also fails, try with session (visit homepage first to get cookies)
+                    try:
+                        html = await asyncio.to_thread(
+                            self._get_ashdod_html_with_session, container_id
+                        )
+                    except Exception as fallback_exc:  # pragma: no cover - best effort
+                        return self._build_error_result(
+                            "נמל אשדוד",
+                            self.ASHDOD_URL,
+                            fallback_exc,
+                        )
             else:
                 return self._build_error_result("נמל אשדוד", self.ASHDOD_URL, exc)
         except Exception as exc:
@@ -172,6 +189,33 @@ class ContainerStatusService:
             follow_redirects=True,
             http2=True,
         ) as sync_client:
+            resp = sync_client.get(
+                self.ASHDOD_URL,
+                params={"MISMHOLA": container_id},
+            )
+            resp.raise_for_status()
+            return resp.text
+
+    def _get_ashdod_html_with_session(self, container_id: str) -> str:
+        """
+        Try to fetch Ashdod container status by first visiting the homepage
+        to establish a session and get cookies, then querying the status page.
+        """
+        with httpx.Client(
+            headers=self.ASHDOD_HEADERS,
+            timeout=self._timeout,
+            follow_redirects=True,
+            http2=True,
+        ) as sync_client:
+            # First, visit the homepage to establish session and get cookies
+            try:
+                homepage_resp = sync_client.get("https://www.ashdodport.co.il/")
+                homepage_resp.raise_for_status()
+            except Exception:
+                # If homepage fails, continue anyway
+                pass
+            
+            # Now try to get the container status page
             resp = sync_client.get(
                 self.ASHDOD_URL,
                 params={"MISMHOLA": container_id},
