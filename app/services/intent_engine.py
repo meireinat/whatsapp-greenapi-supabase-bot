@@ -53,20 +53,20 @@ class IntentEngine:
         # Support with verbs FIRST (more specific): "כמה מכולות נפרקו בפברואר 25"
         # This handles "ב" directly attached to month name: "בפברואר" as one word
         re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+ב(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|עשה|טופלו|היו)\s+ב(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
             re.IGNORECASE,
         ),
         re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+ב(?P<month_name>\S+)",
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|עשה|טופלו|היו)\s+ב(?P<month_name>\S+)",
             re.IGNORECASE,
         ),
         # Support with verbs and space: "כמה מכולות נפרקו ב פברואר 25"
         re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|עשה|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)\s+(?P<year>\d{2,4})",
             re.IGNORECASE,
         ),
         re.compile(
-            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)",
+            r"\bכמה\b.*\bמכולות\b.*?(?:נפרקו|עשו|עשה|טופלו|היו)\s+(?:ב|בחודש|ב-|בחודש-)\s*(?P<month_name>\S+)",
             re.IGNORECASE,
         ),
         # Hebrew: "כמה מכולות בינואר 2024" or "כמה מכולות בחודש ינואר 2024"
