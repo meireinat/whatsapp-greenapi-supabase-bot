@@ -4,7 +4,7 @@ Application constants and version information.
 
 # Application version
 # This will be updated automatically on each commit via git hook or CI/CD
-VERSION = "0.1.0"
+VERSION = "0.1.0+c2e062e"
 
 # Application name
 APP_NAME = "WhatsApp Operations Bot"

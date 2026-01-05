@@ -97,25 +97,9 @@ def get_manager_gpt_service() -> ManagerGPTService | None:
 
 
 def get_version() -> str:
-    """Get application version, including git commit hash if available."""
-    import subprocess
-    import os
-    
-    try:
-        # Try to get git commit hash
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            timeout=2,
-        )
-        if result.returncode == 0:
-            commit_hash = result.stdout.strip()
-            return f"{VERSION} ({commit_hash})"
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
-        pass
-    
+    """Get application version from constants."""
+    # VERSION in constants.py should be updated by update_version.py script
+    # or CI/CD pipeline to include commit hash
     return VERSION
 
 
