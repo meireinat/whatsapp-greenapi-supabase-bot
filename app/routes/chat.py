@@ -108,7 +108,7 @@ def get_version() -> str:
 async def chat_page():
     """Serve the chat interface HTML page."""
     version = get_version()
-    html_content = f"""
+    html_content = """
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head>
@@ -358,7 +358,7 @@ async def chat_page():
             <div class="chat-header-title">
                 ⚓ בוט נמלי
             </div>
-            <div class="chat-header-version">גרסה {version}</div>
+            <div class="chat-header-version">גרסה """ + version + """</div>
         </div>
         <div class="chat-messages" id="messages">
             <div class="welcome-message">
