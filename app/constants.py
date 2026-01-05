@@ -3,6 +3,7 @@ Application constants and version information.
 """
 
 # Application version
+# This will be updated automatically on each commit via git hook or CI/CD
 VERSION = "0.1.0"
 
 # Application name
@@ -30,6 +31,14 @@ MAX_CONVERSATION_HISTORY = 5  # Maximum number of previous queries to retrieve
 # Data fetching settings
 DEFAULT_METRICS_YEARS_BACK = 5  # Years of historical data to fetch for LLM analysis
 DEFAULT_MAX_ROWS_FOR_LLM = 10000  # Maximum rows to fetch for LLM analysis
+
+
+
+
+
+
+
+
 
 
 

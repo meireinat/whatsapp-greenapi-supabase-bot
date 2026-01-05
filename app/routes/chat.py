@@ -19,6 +19,7 @@ from app.constants import (
     MAX_CONVERSATION_HISTORY,
     DEFAULT_METRICS_YEARS_BACK,
     DEFAULT_MAX_ROWS_FOR_LLM,
+    VERSION,
 )
 from app.services.intent_engine import IntentEngine, IntentResult
 from app.services.response_builder import (
@@ -95,17 +96,41 @@ def get_manager_gpt_service() -> ManagerGPTService | None:
     return getattr(app.state, "manager_gpt_service", None)
 
 
+def get_version() -> str:
+    """Get application version, including git commit hash if available."""
+    import subprocess
+    import os
+    
+    try:
+        # Try to get git commit hash
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            timeout=2,
+        )
+        if result.returncode == 0:
+            commit_hash = result.stdout.strip()
+            return f"{VERSION} ({commit_hash})"
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        pass
+    
+    return VERSION
+
+
 @router.get("/", response_class=HTMLResponse)
 @router.get("", response_class=HTMLResponse)  # Also handle URL without trailing slash
 async def chat_page():
     """Serve the chat interface HTML page."""
-    html_content = """
+    version = get_version()
+    html_content = f"""
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>בוט נמלי - צ'אט</title>
+    <title>⚓ בוט נמלי - צ'אט</title>
     <style>
         * {
             margin: 0;
@@ -142,6 +167,22 @@ async def chat_page():
             text-align: center;
             font-size: 24px;
             font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .chat-header-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .chat-header-version {
+            font-size: 12px;
+            opacity: 0.8;
+            font-weight: normal;
         }
         
         .chat-messages {
@@ -278,7 +319,10 @@ async def chat_page():
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            🤖 בוט נמלי
+            <div class="chat-header-title">
+                ⚓ בוט נמלי
+            </div>
+            <div class="chat-header-version">גרסה {version}</div>
         </div>
         <div class="chat-messages" id="messages">
             <div class="welcome-message">
