@@ -1271,30 +1271,20 @@ async def chat_query(
                     response_text = build_fallback_response()
             
             elif intent.name == "procedure_question":
-                # Route procedure questions directly to NotebookLM
+                # Route procedure questions directly to NotebookLM with direct link
                 question = intent.parameters.get("question", incoming_text)
-                logger.info("Procedure question detected, querying NotebookLM: %s", question)
-                notebooklm_client = get_notebooklm_client()
-                try:
-                    notebooklm_result = await notebooklm_client.query(question)
-                    if notebooklm_result.get("success"):
-                        response_text = notebooklm_result.get("response") or notebooklm_result.get("message", "")
-                        logger.info("Got response from NotebookLM for procedure question")
-                    else:
-                        # If NotebookLM failed, try with Gemini fallback
-                        logger.info("NotebookLM query failed, trying with Gemini fallback")
-                        if gemini_service:
-                            notebook_url = notebooklm_result.get("notebook_url", "")
-                            response_text = await gemini_service.answer_question(
-                                question=f"{question}\n\nלמידע נוסף וספציפי לגבי נהלי תור בנמל, אנא בדוק ב-NotebookLM: {notebook_url}",
-                                metrics={},
-                                knowledge_sections=None,
-                            )
-                        else:
-                            response_text = notebooklm_result.get("message", build_fallback_response())
-                except Exception as e:
-                    logger.error("Error querying NotebookLM for procedure question: %s", e, exc_info=True)
-                    response_text = build_fallback_response()
+                logger.info("Procedure question detected, providing NotebookLM link: %s", question)
+                
+                # Build NotebookLM URL
+                notebook_id = "66688b34-ca77-4097-8ac8-42ca8285681f"
+                notebook_url = f"https://notebooklm.google.com/notebook/{notebook_id}"
+                
+                # Always provide direct link with the question (don't try API first)
+                response_text = (
+                    f"למידע נוסף וספציפי לגבי נהלי תור בנמל, אנא בדוק ב-NotebookLM: "
+                    f"[פתח קישור]({notebook_url})\n\n"
+                    f"שאלתך: {question}"
+                )
             
             elif intent.name == "manager_question":
                 question = intent.parameters.get("question", incoming_text)
