@@ -64,6 +64,8 @@ class ChatResponse(BaseModel):
     answer: str
     intent: str | None = None
     citations: list[Citation] | None = None
+    auto_open_url: str | None = None  # URL to open automatically in new tab
+    auto_open_question: str | None = None  # Question to pass to the opened URL
 
 
 class RecentQuery(BaseModel):
@@ -939,6 +941,23 @@ async def chat_page():
                 console.log('Calling addMessage with:', data.answer);
                 addMessage(data.answer, false, data.citations);
                 console.log('Message should be displayed now');
+                
+                // If auto_open_url is provided, open it in a new tab
+                if (data.auto_open_url) {
+                    console.log('Auto-opening URL:', data.auto_open_url);
+                    const newWindow = window.open(data.auto_open_url, '_blank', 'noopener,noreferrer');
+                    if (newWindow) {
+                        // Store the question in sessionStorage so it can be accessed if needed
+                        if (data.auto_open_question) {
+                            sessionStorage.setItem('notebooklm_question', data.auto_open_question);
+                            console.log('Stored question in sessionStorage:', data.auto_open_question);
+                        }
+                    } else {
+                        console.warn('Failed to open new window - popup may be blocked');
+                        // Fallback: show message to user
+                        alert('נא לאפשר פתיחת חלונות חדשים בדפדפן כדי לפתוח את NotebookLM');
+                    }
+                }
             } catch (error) {
                 removeLoading();
                 console.error('Error in sendMessage:', error);
@@ -1285,6 +1304,9 @@ async def chat_query(
                     f"[פתח קישור]({notebook_url})\n\n"
                     f"שאלתך: {question}"
                 )
+                
+                # Set auto-open URL and question for later use
+                intent_name = intent.name
             
             elif intent.name == "manager_question":
                 question = intent.parameters.get("question", incoming_text)
@@ -1411,7 +1433,21 @@ async def chat_query(
             logger.error("Failed to log query to Supabase: %s", e, exc_info=True)
             # Don't fail the request if logging fails
         
-        return ChatResponse(answer=response_text, intent=intent_name, citations=citations)
+        # Check if this is a procedure question that should auto-open NotebookLM
+        auto_open_url = None
+        auto_open_question = None
+        if intent and intent.name == "procedure_question":
+            notebook_id = "66688b34-ca77-4097-8ac8-42ca8285681f"
+            auto_open_url = f"https://notebooklm.google.com/notebook/{notebook_id}"
+            auto_open_question = intent.parameters.get("question", incoming_text)
+        
+        return ChatResponse(
+            answer=response_text, 
+            intent=intent_name, 
+            citations=citations,
+            auto_open_url=auto_open_url,
+            auto_open_question=auto_open_question,
+        )
     except HTTPException:
         # Re-raise HTTP exceptions (like 400 Bad Request)
         raise
