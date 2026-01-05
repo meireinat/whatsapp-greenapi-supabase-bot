@@ -38,6 +38,7 @@ from app.services.hazard_knowledge import HazardKnowledgeBase
 from app.services.topic_knowledge import TopicKnowledgeBase
 from app.services.container_status import ContainerStatusService
 from app.services.manager_gpt_service import ManagerGPTService
+from app.services.notebooklm_client import NotebookLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,11 @@ def get_container_status_service() -> ContainerStatusService | None:
 def get_manager_gpt_service() -> ManagerGPTService | None:
     from app.main import app
     return getattr(app.state, "manager_gpt_service", None)
+
+
+def get_notebooklm_client() -> NotebookLMClient:
+    """Get or create NotebookLM client."""
+    return NotebookLMClient()
 
 
 def get_version() -> str:
@@ -1147,6 +1153,27 @@ async def chat_query(
                     # If knowledge sections were provided and used, mark as used
                     if combined_knowledge:
                         used_knowledge = True
+                    
+                    # If no knowledge sections were found and response indicates no info,
+                    # try NotebookLM as fallback
+                    if not combined_knowledge or (
+                        not used_knowledge and 
+                        any(indicator in response_text.lower() for indicator in [
+                            "אין מידע", "לא זמין", "לא ניתן לספק", "אינם כוללים"
+                        ])
+                    ):
+                        logger.info("No knowledge found or response indicates no info, trying NotebookLM")
+                        notebooklm_client = get_notebooklm_client()
+                        try:
+                            notebooklm_result = await notebooklm_client.try_query_with_gemini_fallback(
+                                question=incoming_text,
+                                gemini_service=gemini_service,
+                            )
+                            # Append NotebookLM suggestion to response
+                            if notebooklm_result and notebooklm_result not in response_text:
+                                response_text += f"\n\n{notebooklm_result}"
+                        except Exception as e:
+                            logger.warning("NotebookLM query failed: %s", e)
                 else:
                     logger.info("No LLM service available, using fallback")
                     response_text = build_fallback_response()
@@ -1260,6 +1287,27 @@ async def chat_query(
                         # If knowledge sections were provided and used, mark as used
                         if combined_knowledge:
                             used_knowledge = True
+                        
+                        # If no knowledge sections were found and response indicates no info,
+                        # try NotebookLM as fallback
+                        if not combined_knowledge or (
+                            not used_knowledge and 
+                            any(indicator in response_text.lower() for indicator in [
+                                "אין מידע", "לא זמין", "לא ניתן לספק", "אינם כוללים"
+                            ])
+                        ):
+                            logger.info("No knowledge found or response indicates no info, trying NotebookLM")
+                            notebooklm_client = get_notebooklm_client()
+                            try:
+                                notebooklm_result = await notebooklm_client.try_query_with_gemini_fallback(
+                                    question=incoming_text,
+                                    gemini_service=gemini_service,
+                                )
+                                # Append NotebookLM suggestion to response
+                                if notebooklm_result and notebooklm_result not in response_text:
+                                    response_text += f"\n\n{notebooklm_result}"
+                            except Exception as e:
+                                logger.warning("NotebookLM query failed: %s", e)
                     except Exception as e:
                         logger.error("Error calling Gemini service: %s", e, exc_info=True)
                         response_text = build_fallback_response()
