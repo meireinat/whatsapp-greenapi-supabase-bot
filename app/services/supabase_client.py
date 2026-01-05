@@ -1031,12 +1031,12 @@ class SupabaseService:
             )
             return []
 
-    def get_recent_queries(self, limit: int = 10) -> list[dict[str, Any]]:
+    def get_recent_queries(self, limit: int = 100) -> list[dict[str, Any]]:
         """
         Get recent queries from all users.
         
         Args:
-            limit: Maximum number of recent queries to return (default: 10)
+            limit: Maximum number of recent queries to return (default: 100)
         
         Returns:
             List of recent queries with user_text, response_text, intent, and created_at

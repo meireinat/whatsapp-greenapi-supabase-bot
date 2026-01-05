@@ -652,7 +652,7 @@ async def chat_page():
     <button id="toggleQueriesBtn" class="toggle-queries-btn" title="שאלות אחרונות">📋</button>
     <div id="recentQueriesPanel" class="recent-queries-panel">
         <div class="recent-queries-header">
-            <h2>10 שאלות אחרונות</h2>
+            <h2>100 שאלות אחרונות</h2>
             <button class="close-panel" id="closePanelBtn">×</button>
         </div>
         <div id="queriesList"></div>
@@ -1322,10 +1322,10 @@ async def chat_query(
 async def get_recent_queries(
     supabase_service: SupabaseService = Depends(get_supabase_service),
 ) -> RecentQueriesResponse:
-    """Get the 10 most recent queries from the database (always fetches fresh from DB)."""
+    """Get the 100 most recent queries from the database (always fetches fresh from DB)."""
     try:
         logger.info("Fetching recent queries from database...")
-        queries = supabase_service.get_recent_queries(limit=10)
+        queries = supabase_service.get_recent_queries(limit=100)
         logger.info("Retrieved %d queries from database", len(queries))
         
         # Convert to response model
