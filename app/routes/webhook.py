@@ -284,7 +284,9 @@ async def handle_webhook(
         logger.warning("Missing messageData or senderData in incomingMessageReceived webhook")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    if payload.messageData.typeMessage.lower() != "textmessage":
+    # Support both textMessage and extendedTextMessage (both contain text in textMessageData)
+    message_type_lower = payload.messageData.typeMessage.lower()
+    if message_type_lower not in ("textmessage", "extendedtextmessage"):
         logger.info("Ignoring non-text message (type=%s)", payload.messageData.typeMessage)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
