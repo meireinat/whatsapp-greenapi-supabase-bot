@@ -10,7 +10,6 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
-    Request,
     status,
 )
 from fastapi.responses import HTMLResponse
@@ -97,6 +96,7 @@ def get_manager_gpt_service() -> ManagerGPTService | None:
 
 
 @router.get("/", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse)  # Also handle URL without trailing slash
 async def chat_page():
     """Serve the chat interface HTML page."""
     html_content = """
