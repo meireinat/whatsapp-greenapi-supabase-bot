@@ -368,9 +368,11 @@ async def chat_page():
                 }
                 
                 const data = await response.json();
+                console.log('Response data:', data);
                 removeLoading();
                 
                 if (!data || !data.answer) {
+                    console.error('Invalid response format:', data);
                     throw new Error('תשובה לא תקינה מהשרת');
                 }
                 
