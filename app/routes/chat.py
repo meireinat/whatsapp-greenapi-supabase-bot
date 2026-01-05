@@ -799,11 +799,12 @@ async def chat_page():
         
         toggleQueriesBtn.addEventListener('click', function() {
             console.log('Toggle button clicked');
-            console.log('Panel element:', recentQueriesPanel);
+            const wasOpen = recentQueriesPanel.classList.contains('open');
             recentQueriesPanel.classList.toggle('open');
-            console.log('Panel classes:', recentQueriesPanel.classList.toString());
+            
+            // Always reload queries when opening the panel (even if it was already open)
             if (recentQueriesPanel.classList.contains('open')) {
-                console.log('Loading recent queries...');
+                console.log('Loading recent queries from DB...');
                 loadRecentQueries();
             }
         });
@@ -813,16 +814,21 @@ async def chat_page():
         });
         
         async function loadRecentQueries() {
+            // Show loading state
+            queriesList.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">טוען שאלות מהמסד נתונים...</p>';
+            
             try {
-                const response = await fetch('/api/chat/recent-queries');
+                // Add timestamp to prevent caching
+                const response = await fetch('/api/chat/recent-queries?t=' + Date.now());
                 if (!response.ok) {
                     throw new Error('Failed to load queries');
                 }
                 const data = await response.json();
+                console.log('Loaded queries from DB:', data.queries.length);
                 displayQueries(data.queries);
             } catch (error) {
                 console.error('Error loading recent queries:', error);
-                queriesList.innerHTML = '<p style="color: #999; text-align: center;">שגיאה בטעינת השאלות</p>';
+                queriesList.innerHTML = '<p style="color: #ff6b6b; text-align: center; padding: 20px;">שגיאה בטעינת השאלות מהמסד נתונים</p>';
             }
         }
         
@@ -1118,9 +1124,11 @@ async def chat_query(
 async def get_recent_queries(
     supabase_service: SupabaseService = Depends(get_supabase_service),
 ) -> RecentQueriesResponse:
-    """Get the 10 most recent queries from the database."""
+    """Get the 10 most recent queries from the database (always fetches fresh from DB)."""
     try:
+        logger.info("Fetching recent queries from database...")
         queries = supabase_service.get_recent_queries(limit=10)
+        logger.info("Retrieved %d queries from database", len(queries))
         
         # Convert to response model
         recent_queries = []
