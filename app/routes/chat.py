@@ -1064,18 +1064,7 @@ async def chat_query(
         response_text = ""
         intent_name = None
         citations_list = []
-        
-        # Collect citations from knowledge sections
-        if knowledge_sections:
-            for section in knowledge_sections:
-                citations_list.append(
-                    Citation(
-                        document_title=section.get("document_title") or section.get("topic"),
-                        source_file=section.get("source_file"),
-                        excerpt=section.get("excerpt", ""),
-                        section_id=section.get("section_id"),
-                    )
-                )
+        used_knowledge = False  # Track if knowledge sections were used in the response
         
         if not intent:
             logger.info("No intent matched, using Council/Gemini or fallback")
@@ -1096,6 +1085,9 @@ async def chat_query(
                         knowledge_sections=combined_knowledge,
                         conversation_history=conversation_history,
                     )
+                    # If knowledge sections were provided and used, mark as used
+                    if combined_knowledge:
+                        used_knowledge = True
                 elif gemini_service:
                     logger.info("Using Gemini service...")
                     response_text = await gemini_service.answer_question(
@@ -1104,6 +1096,9 @@ async def chat_query(
                         knowledge_sections=combined_knowledge,
                         conversation_history=conversation_history,
                     )
+                    # If knowledge sections were provided and used, mark as used
+                    if combined_knowledge:
+                        used_knowledge = True
                 else:
                     logger.info("No LLM service available, using fallback")
                     response_text = build_fallback_response()
@@ -1210,6 +1205,9 @@ async def chat_query(
                             knowledge_sections=combined_knowledge,
                             conversation_history=conversation_history,
                         )
+                        # If knowledge sections were provided and used, mark as used
+                        if combined_knowledge:
+                            used_knowledge = True
                     except Exception as e:
                         logger.error("Error calling Gemini service: %s", e, exc_info=True)
                         response_text = build_fallback_response()
@@ -1225,8 +1223,19 @@ async def chat_query(
         
         logger.info("Chat response: %s", response_text[:200])
         
-        # Return citations only if we have knowledge sections
-        citations = citations_list if citations_list else None
+        # Collect citations from knowledge sections only if they were used
+        citations = None
+        if used_knowledge and knowledge_sections:
+            citations = []
+            for section in knowledge_sections:
+                citations.append(
+                    Citation(
+                        document_title=section.get("document_title") or section.get("topic"),
+                        source_file=section.get("source_file"),
+                        excerpt=section.get("excerpt", ""),
+                        section_id=section.get("section_id"),
+                    )
+                )
         
         return ChatResponse(answer=response_text, intent=intent_name, citations=citations)
     except HTTPException:
