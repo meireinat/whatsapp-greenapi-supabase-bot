@@ -4,6 +4,7 @@ Web chat interface for querying the bot.
 
 from __future__ import annotations
 
+import json
 import logging
 import datetime as dt
 from fastapi import (
@@ -942,21 +943,23 @@ async def chat_page():
                 addMessage(data.answer, false, data.citations);
                 console.log('Message should be displayed now');
                 
-                // If auto_open_url is provided, open it in a new tab
+                // If auto_open_url is provided, open it in a new tab and auto-fill question
                 if (data.auto_open_url) {
                     console.log('Auto-opening URL:', data.auto_open_url);
-                    const newWindow = window.open(data.auto_open_url, '_blank', 'noopener,noreferrer');
-                    if (newWindow) {
-                        // Store the question in sessionStorage so it can be accessed if needed
-                        if (data.auto_open_question) {
-                            sessionStorage.setItem('notebooklm_question', data.auto_open_question);
-                            console.log('Stored question in sessionStorage:', data.auto_open_question);
-                        }
-                    } else {
-                        console.warn('Failed to open new window - popup may be blocked');
-                        // Fallback: show message to user
-                        alert('נא לאפשר פתיחת חלונות חדשים בדפדפן כדי לפתוח את NotebookLM');
+                    const question = data.auto_open_question || '';
+                    
+                    if (!question) {
+                        // No question to fill, just open the URL
+                        window.open(data.auto_open_url, '_blank', 'noopener,noreferrer');
+                        return;
                     }
+                    
+                    // Open NotebookLM through a helper page that will inject the script
+                    const helperUrl = window.location.origin + '/api/chat/notebooklm-helper?url=' + 
+                        encodeURIComponent(data.auto_open_url) + '&question=' + 
+                        encodeURIComponent(question);
+                    
+                    window.open(helperUrl, '_blank', 'noopener,noreferrer');
                 }
             } catch (error) {
                 removeLoading();
@@ -1469,6 +1472,173 @@ async def chat_query(
         error_message = f"מצטער, אירעה שגיאה בעיבוד השאלה. אנא נסה שוב מאוחר יותר."
         return ChatResponse(answer=error_message, intent=None, citations=None)
 
+
+@router.get("/notebooklm-helper", response_class=HTMLResponse)
+async def notebooklm_helper(url: str, question: str):
+    """
+    Helper page that opens NotebookLM and auto-fills the question.
+    This page runs JavaScript on the same origin, then redirects to NotebookLM.
+    """
+    notebooklm_url = url
+    encoded_question = question.replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html dir="rtl" lang="he">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>פותח את NotebookLM...</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background: #f5f5f5;
+            }}
+            .container {{
+                text-align: center;
+                padding: 20px;
+            }}
+            .spinner {{
+                border: 4px solid #f3f3f3;
+                border-top: 4px solid #3498db;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 20px;
+            }}
+            @keyframes spin {{
+                0% {{ transform: rotate(0deg); }}
+                100% {{ transform: rotate(360deg); }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="spinner"></div>
+            <p>פותח את NotebookLM וממלא את השאלה...</p>
+        </div>
+        <script>
+            const notebooklmUrl = {json.dumps(notebooklm_url)};
+            const question = {json.dumps(question)};
+            
+            // Open NotebookLM in new window and inject script
+            setTimeout(function() {{
+                const newWindow = window.open(notebooklmUrl, '_blank', 'noopener,noreferrer');
+                if (newWindow) {{
+                    // Wait for page to load
+                    setTimeout(function() {{
+                        try {{
+                            // Try to inject script
+                            const script = `
+                                (function() {{
+                                    const question = {json.dumps(question)};
+                                    if (!question) return;
+                                    
+                                    function tryFillAndSend() {{
+                                        const inputSelectors = [
+                                            'textarea[placeholder*="שאל"]',
+                                            'textarea[placeholder*="Ask"]',
+                                            'textarea[aria-label*="שאל"]',
+                                            'textarea[aria-label*="Ask"]',
+                                            'div[contenteditable="true"][role="textbox"]',
+                                            'textarea[data-testid*="input"]',
+                                            'textarea[data-testid*="chat"]',
+                                            'textarea'
+                                        ];
+                                        
+                                        let input = null;
+                                        for (const selector of inputSelectors) {{
+                                            const elements = document.querySelectorAll(selector);
+                                            for (const el of elements) {{
+                                                if (el.offsetParent !== null && el.offsetWidth > 0) {{
+                                                    input = el;
+                                                    break;
+                                                }}
+                                            }}
+                                            if (input) break;
+                                        }}
+                                        
+                                        if (input) {{
+                                            if (input.tagName === 'TEXTAREA' || input.tagName === 'INPUT') {{
+                                                input.value = question;
+                                                input.focus();
+                                                input.dispatchEvent(new Event('input', {{ bubbles: true, cancelable: true }}));
+                                                input.dispatchEvent(new Event('change', {{ bubbles: true, cancelable: true }}));
+                                            }} else if (input.contentEditable === 'true') {{
+                                                input.textContent = question;
+                                                input.focus();
+                                                input.dispatchEvent(new Event('input', {{ bubbles: true, cancelable: true }}));
+                                            }}
+                                            
+                                            console.log('Question filled:', question);
+                                            
+                                            setTimeout(function() {{
+                                                const sendSelectors = [
+                                                    'button[aria-label*="שלח"]',
+                                                    'button[aria-label*="Send"]',
+                                                    'button[type="submit"]',
+                                                    'button[data-testid*="send"]',
+                                                    'button[data-testid*="submit"]'
+                                                ];
+                                                
+                                                let sendButton = null;
+                                                for (const selector of sendSelectors) {{
+                                                    const buttons = document.querySelectorAll(selector);
+                                                    for (const btn of buttons) {{
+                                                        if (btn.offsetParent !== null && !btn.disabled) {{
+                                                            sendButton = btn;
+                                                            break;
+                                                        }}
+                                                    }}
+                                                    if (sendButton) break;
+                                                }}
+                                                
+                                                if (sendButton) {{
+                                                    sendButton.click();
+                                                    console.log('Question sent automatically');
+                                                }}
+                                            }}, 1000);
+                                            
+                                            return true;
+                                        }}
+                                        return false;
+                                    }}
+                                    
+                                    if (tryFillAndSend()) return;
+                                    
+                                    let attempts = 0;
+                                    const maxAttempts = 20;
+                                    const interval = setInterval(function() {{
+                                        attempts++;
+                                        if (tryFillAndSend() || attempts >= maxAttempts) {{
+                                            clearInterval(interval);
+                                        }}
+                                    }}, 500);
+                                }})();
+                            `;
+                            
+                            newWindow.eval(script);
+                        }} catch (e) {{
+                            console.error('Cannot inject due to CORS:', e);
+                            // Fallback: copy to clipboard
+                            if (navigator.clipboard) {{
+                                navigator.clipboard.writeText(question);
+                            }}
+                        }}
+                    }}, 3000);
+                }}
+            }}, 100);
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 @router.get("/recent-queries", response_model=RecentQueriesResponse)
 async def get_recent_queries(
