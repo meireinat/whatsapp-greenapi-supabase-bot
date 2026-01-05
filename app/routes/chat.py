@@ -1049,12 +1049,23 @@ async def chat_page():
                     e.stopPropagation();
                     console.log('🔵 Toggle button CLICKED!');
                     const wasOpen = recentQueriesPanel.classList.contains('open');
-                    recentQueriesPanel.classList.toggle('open');
+                    
+                    // Force toggle using add/remove instead of toggle
+                    if (wasOpen) {
+                        recentQueriesPanel.classList.remove('open');
+                        console.log('Panel CLOSED');
+                    } else {
+                        recentQueriesPanel.classList.add('open');
+                        console.log('Panel OPENED');
+                    }
+                    
                     const isNowOpen = recentQueriesPanel.classList.contains('open');
                     console.log('Panel state - was:', wasOpen, 'now:', isNowOpen);
                     console.log('Panel element:', recentQueriesPanel);
                     console.log('Panel classes:', recentQueriesPanel.className);
-                    console.log('Panel computed style:', window.getComputedStyle(recentQueriesPanel).transform);
+                    console.log('Panel computed style transform:', window.getComputedStyle(recentQueriesPanel).transform);
+                    console.log('Panel computed style display:', window.getComputedStyle(recentQueriesPanel).display);
+                    console.log('Panel computed style visibility:', window.getComputedStyle(recentQueriesPanel).visibility);
                     
                     // Always reload queries when opening the panel
                     if (isNowOpen) {
