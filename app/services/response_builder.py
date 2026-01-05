@@ -101,12 +101,22 @@ def build_container_status_response(
         
         # Add clickable URL if available
         if result.url:
-            port_line += f" [פתח קישור]({result.url})"
+            # For Ashdod, add the container ID to the URL if it's a 403 error
+            if "ashdodport.co.il" in result.url and result.error and "403" in str(result.error):
+                full_url = f"{result.url}?MISMHOLA={container_id}"
+            else:
+                full_url = result.url
+            port_line += f" [פתח קישור]({full_url})"
         
         lines.append(port_line)
         
         if result.error and not result.success:
-            lines.append(f"• סיבה: {result.error}")
+            error_msg = str(result.error)
+            # For 403 errors, provide more helpful message
+            if "403" in error_msg:
+                lines.append(f"• סיבה: האתר חוסם בקשות אוטומטיות. אנא בדוק ידנית דרך הקישור.")
+            else:
+                lines.append(f"• סיבה: {result.error}")
         if result.details:
             for label, value in result.details:
                 lines.append(f"• {label}: {value}")

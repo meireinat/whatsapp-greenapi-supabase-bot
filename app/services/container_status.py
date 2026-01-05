@@ -42,7 +42,7 @@ class ContainerStatusService:
     CHROME_UA = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/127.0.0.1 Safari/537.36"
+        "Chrome/120.0.0.0 Safari/537.36"
     )
 
     ASHDOD_HEADERS = {
@@ -200,25 +200,42 @@ class ContainerStatusService:
         """
         Try to fetch Ashdod container status by first visiting the homepage
         to establish a session and get cookies, then querying the status page.
+        Uses cookies from the homepage to appear more like a real browser session.
         """
+        import time
+        
         with httpx.Client(
             headers=self.ASHDOD_HEADERS,
             timeout=self._timeout,
             follow_redirects=True,
             http2=True,
+            cookies={},  # Explicitly manage cookies
         ) as sync_client:
             # First, visit the homepage to establish session and get cookies
             try:
-                homepage_resp = sync_client.get("https://www.ashdodport.co.il/")
+                # Remove Referer for homepage visit
+                homepage_headers = {k: v for k, v in self.ASHDOD_HEADERS.items() if k != "Referer"}
+                homepage_resp = sync_client.get(
+                    "https://www.ashdodport.co.il/",
+                    headers=homepage_headers
+                )
                 homepage_resp.raise_for_status()
+                # Small delay to mimic human behavior
+                time.sleep(0.5)
             except Exception:
                 # If homepage fails, continue anyway
                 pass
             
-            # Now try to get the container status page
+            # Now try to get the container status page with cookies from homepage
+            # Use the full URL with referer pointing back to homepage
+            status_headers = {
+                **self.ASHDOD_HEADERS,
+                "Referer": "https://www.ashdodport.co.il/",
+            }
             resp = sync_client.get(
                 self.ASHDOD_URL,
                 params={"MISMHOLA": container_id},
+                headers=status_headers,
             )
             resp.raise_for_status()
             return resp.text
