@@ -1009,17 +1009,38 @@ async def chat_page():
         const closePanelBtn = document.getElementById('closePanelBtn');
         const queriesList = document.getElementById('queriesList');
         
-        toggleQueriesBtn.addEventListener('click', function() {
-            console.log('Toggle button clicked');
-            const wasOpen = recentQueriesPanel.classList.contains('open');
-            recentQueriesPanel.classList.toggle('open');
-            
-            // Always reload queries when opening the panel (even if it was already open)
-            if (recentQueriesPanel.classList.contains('open')) {
-                console.log('Loading recent queries from DB...');
-                loadRecentQueries();
-            }
-        });
+        // Debug: Check if elements exist
+        if (!toggleQueriesBtn) {
+            console.error('toggleQueriesBtn not found!');
+        }
+        if (!recentQueriesPanel) {
+            console.error('recentQueriesPanel not found!');
+        }
+        if (!closePanelBtn) {
+            console.error('closePanelBtn not found!');
+        }
+        if (!queriesList) {
+            console.error('queriesList not found!');
+        }
+        
+        if (toggleQueriesBtn && recentQueriesPanel) {
+            toggleQueriesBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Toggle button clicked');
+                const wasOpen = recentQueriesPanel.classList.contains('open');
+                recentQueriesPanel.classList.toggle('open');
+                console.log('Panel is now:', recentQueriesPanel.classList.contains('open') ? 'open' : 'closed');
+                
+                // Always reload queries when opening the panel (even if it was already open)
+                if (recentQueriesPanel.classList.contains('open')) {
+                    console.log('Loading recent queries from DB...');
+                    loadRecentQueries();
+                }
+            });
+        } else {
+            console.error('Cannot set up toggle button - elements missing');
+        }
         
         closePanelBtn.addEventListener('click', function() {
             recentQueriesPanel.classList.remove('open');
