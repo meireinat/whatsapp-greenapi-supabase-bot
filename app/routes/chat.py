@@ -271,6 +271,51 @@ async def chat_page():
             transform: none;
         }
         
+        .voice-button {
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            font-size: 20px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .voice-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .voice-button:active {
+            transform: translateY(0);
+        }
+        
+        .voice-button.recording {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+        }
+        
+        .voice-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
         .loading {
             display: inline-block;
             width: 20px;
@@ -321,6 +366,7 @@ async def chat_page():
                 placeholder="הקלד את השאלה שלך כאן..."
                 autocomplete="off"
             />
+            <button id="voiceButton" class="voice-button" title="דיבור">🎤</button>
             <button id="sendButton" class="send-button">שלח</button>
         </div>
     </div>
@@ -329,6 +375,84 @@ async def chat_page():
         const messagesContainer = document.getElementById('messages');
         const questionInput = document.getElementById('questionInput');
         const sendButton = document.getElementById('sendButton');
+        const voiceButton = document.getElementById('voiceButton');
+        
+        // Check if Web Speech API is supported
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isRecording = false;
+        
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'he-IL'; // Hebrew (Israel)
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            
+            recognition.onstart = function() {
+                isRecording = true;
+                voiceButton.classList.add('recording');
+                voiceButton.title = 'מקליט... לחץ שוב כדי לעצור';
+            };
+            
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                questionInput.value = transcript;
+                questionInput.focus();
+                stopRecording();
+            };
+            
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                stopRecording();
+                if (event.error === 'no-speech') {
+                    alert('לא זוהה דיבור. נסה שוב.');
+                } else if (event.error === 'not-allowed') {
+                    alert('גישה למיקרופון נדחתה. אנא אפשר גישה למיקרופון בדפדפן.');
+                } else {
+                    alert('שגיאה בהכרת דיבור: ' + event.error);
+                }
+            };
+            
+            recognition.onend = function() {
+                stopRecording();
+            };
+        } else {
+            voiceButton.disabled = true;
+            voiceButton.title = 'הכרת דיבור לא נתמכת בדפדפן זה';
+        }
+        
+        function startRecording() {
+            if (!recognition || isRecording) {
+                return;
+            }
+            try {
+                recognition.start();
+            } catch (e) {
+                console.error('Error starting recognition:', e);
+            }
+        }
+        
+        function stopRecording() {
+            if (!recognition || !isRecording) {
+                return;
+            }
+            try {
+                recognition.stop();
+            } catch (e) {
+                console.error('Error stopping recognition:', e);
+            }
+            isRecording = false;
+            voiceButton.classList.remove('recording');
+            voiceButton.title = 'דיבור';
+        }
+        
+        voiceButton.addEventListener('click', function() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
         
         function addMessage(text, isUser) {
             console.log('Adding message:', text, 'isUser:', isUser);
