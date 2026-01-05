@@ -140,7 +140,7 @@ class IntentEngine:
         re.compile(r"\b(?:נהל|נהלים|תהליך|תהליכים|מדיניות|פרוצדורה|פרוצדורות)\b", re.IGNORECASE),
         re.compile(r"\b(?:procedure|procedures|policy|policies|process|processes)\b", re.IGNORECASE),
         re.compile(r"\b(?:תור|תורים|עדיפות|עדיפויות)\b.*\b(?:נמל|אוניה|אוניות|מכולה|מכולות)", re.IGNORECASE),
-        re.compile(r"\b(?:עקוף|עוקף|עוקפות|עוקפים)\b.*\b(?:תור|תורים)", re.IGNORECASE),
+        re.compile(r"(?:עקוף|עוקף|עוקפות|עוקפים|לעקוף|לעקף)", re.IGNORECASE),
         re.compile(r"\b(?:queue|queuing|priority|priorities)\b", re.IGNORECASE),
         # Pattern for questions about nuclear ships and queue/priority
         re.compile(r"\b(?:גרעינים|גרעין)\b", re.IGNORECASE),
