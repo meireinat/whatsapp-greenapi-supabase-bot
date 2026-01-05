@@ -93,6 +93,11 @@ app = FastAPI(
 async def log_requests(request: Request, call_next):
     """Log all incoming requests for debugging."""
     logger.info("Incoming request: %s %s from %s", request.method, request.url.path, request.client.host if request.client else "unknown")
+    
+    # Log headers for webhook endpoints to help debug
+    if request.url.path.startswith("/api/green/webhook"):
+        logger.info("Webhook headers: %s", dict(request.headers))
+    
     try:
         response = await call_next(request)
         logger.info("Response status: %s for %s %s", response.status_code, request.method, request.url.path)
