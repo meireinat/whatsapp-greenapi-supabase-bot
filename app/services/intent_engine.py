@@ -135,6 +135,14 @@ class IntentEngine:
         re.compile(r"I'm\s+a\s+manager", re.IGNORECASE),
     )
 
+    # Patterns for procedure/policy questions - should query NotebookLM
+    PROCEDURE_QUESTION_PATTERNS = (
+        re.compile(r"\b(?:נהל|נהלים|תהליך|תהליכים|מדיניות|פרוצדורה|פרוצדורות)\b", re.IGNORECASE),
+        re.compile(r"\b(?:procedure|procedures|policy|policies|process|processes)\b", re.IGNORECASE),
+        re.compile(r"\b(?:תור|תורים|עדיפות|עדיפויות)\b.*\b(?:נמל|אוניה|מכולה)", re.IGNORECASE),
+        re.compile(r"\b(?:queue|queuing|priority|priorities)\b", re.IGNORECASE),
+    )
+
     def match(self, text: str) -> IntentResult | None:
         import logging
         logger = logging.getLogger(__name__)
@@ -145,7 +153,15 @@ class IntentEngine:
 
         logger.info("Matching intent for text: %s (length: %d)", stripped, len(stripped))
 
-        # Check for manager questions first (high priority)
+        # Check for procedure/policy questions first (should query NotebookLM)
+        for pattern in self.PROCEDURE_QUESTION_PATTERNS:
+            if pattern.search(stripped):
+                return IntentResult(
+                    name="procedure_question",
+                    parameters={"question": stripped},
+                )
+
+        # Check for manager questions (high priority)
         for pattern in self.MANAGER_QUESTION_PATTERNS:
             if pattern.search(stripped):
                 return IntentResult(
