@@ -139,8 +139,10 @@ class IntentEngine:
     PROCEDURE_QUESTION_PATTERNS = (
         re.compile(r"\b(?:נהל|נהלים|תהליך|תהליכים|מדיניות|פרוצדורה|פרוצדורות)\b", re.IGNORECASE),
         re.compile(r"\b(?:procedure|procedures|policy|policies|process|processes)\b", re.IGNORECASE),
-        re.compile(r"\b(?:תור|תורים|עדיפות|עדיפויות)\b.*\b(?:נמל|אוניה|מכולה)", re.IGNORECASE),
+        re.compile(r"\b(?:תור|תורים|עדיפות|עדיפויות)\b.*\b(?:נמל|אוניה|אוניות|מכולה|מכולות)", re.IGNORECASE),
+        re.compile(r"\b(?:עקוף|עוקף|עוקפות|עוקפים)\b.*\b(?:תור|תורים)", re.IGNORECASE),
         re.compile(r"\b(?:queue|queuing|priority|priorities)\b", re.IGNORECASE),
+        re.compile(r"\b(?:גרעינים|גרעין)\b.*\b(?:אוניה|אוניות|תור|עקוף)", re.IGNORECASE),
     )
 
     def match(self, text: str) -> IntentResult | None:
