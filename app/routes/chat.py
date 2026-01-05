@@ -1289,6 +1289,24 @@ async def chat_query(
                     )
                 )
         
+        # Log the query to Supabase for history tracking
+        try:
+            intent_params = {}
+            if intent:
+                intent_params = dict(intent.parameters) if intent.parameters else {}
+            
+            supabase_service.log_query(
+                user_phone=chat_id,
+                user_text=incoming_text,
+                intent=intent_name or "unknown",
+                parameters=intent_params,
+                response_text=response_text,
+            )
+            logger.info("Query logged to Supabase for %s", chat_id)
+        except Exception as e:
+            logger.error("Failed to log query to Supabase: %s", e, exc_info=True)
+            # Don't fail the request if logging fails
+        
         return ChatResponse(answer=response_text, intent=intent_name, citations=citations)
     except HTTPException:
         # Re-raise HTTP exceptions (like 400 Bad Request)
