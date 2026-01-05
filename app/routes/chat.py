@@ -1275,19 +1275,44 @@ async def chat_query(
         
         logger.info("Chat response: %s", response_text[:200])
         
-        # Collect citations from knowledge sections only if they were used
+        # Collect citations from knowledge sections only if they were actually used
+        # Don't show citations if the response explicitly states that information is not available
         citations = None
         if used_knowledge and knowledge_sections:
-            citations = []
-            for section in knowledge_sections:
-                citations.append(
-                    Citation(
-                        document_title=section.get("document_title") or section.get("topic"),
-                        source_file=section.get("source_file"),
-                        excerpt=section.get("excerpt", ""),
-                        section_id=section.get("section_id"),
+            # Check if the response indicates that information is not available
+            # If so, don't show citations (they're not relevant)
+            response_lower = response_text.lower()
+            no_info_indicators = [
+                "אין מידע",
+                "לא זמין",
+                "לא ניתן לספק",
+                "אינם כוללים",
+                "אין תיעוד",
+                "אין מידע ספציפי",
+                "הנתונים אינם כוללים",
+                "לא נמצא מידע",
+                "no information available",
+                "information is not available",
+                "data does not include",
+            ]
+            
+            # Only show citations if the response doesn't explicitly say information is not available
+            # AND if knowledge sections were actually provided (not just empty)
+            should_show_citations = not any(indicator in response_lower for indicator in no_info_indicators)
+            
+            if should_show_citations:
+                citations = []
+                for section in knowledge_sections:
+                    citations.append(
+                        Citation(
+                            document_title=section.get("document_title") or section.get("topic"),
+                            source_file=section.get("source_file"),
+                            excerpt=section.get("excerpt", ""),
+                            section_id=section.get("section_id"),
+                        )
                     )
-                )
+            else:
+                logger.info("Not showing citations - response indicates information is not available")
         
         # Log the query to Supabase for history tracking
         try:
