@@ -265,6 +265,13 @@ async def chat_page():
             color: #666;
             padding: 20px;
             font-size: 16px;
+            margin-bottom: 15px;
+        }
+        
+        .message-content {
+            display: block;
+            visibility: visible;
+            opacity: 1;
         }
     </style>
 </head>
@@ -297,6 +304,14 @@ async def chat_page():
         
         function addMessage(text, isUser) {
             console.log('Adding message:', text, 'isUser:', isUser);
+            
+            // Remove welcome message if exists (do this first)
+            const welcomeMsg = messagesContainer.querySelector('.welcome-message');
+            if (welcomeMsg) {
+                console.log('Removing welcome message');
+                welcomeMsg.remove();
+            }
+            
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
             
@@ -306,16 +321,14 @@ async def chat_page():
             
             messageDiv.appendChild(contentDiv);
             messagesContainer.appendChild(messageDiv);
-            console.log('Message added to DOM');
+            console.log('Message added to DOM, container has', messagesContainer.children.length, 'children');
             
-            // Remove welcome message if exists
-            const welcomeMsg = messagesContainer.querySelector('.welcome-message');
-            if (welcomeMsg) {
-                welcomeMsg.remove();
-            }
+            // Force a reflow to ensure the message is visible
+            void messageDiv.offsetHeight;
             
             // Scroll to bottom
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            console.log('Scrolled to', messagesContainer.scrollTop, 'of', messagesContainer.scrollHeight);
         }
         
         function showLoading() {
@@ -527,9 +540,14 @@ async def chat_query(
                 month = intent.parameters.get("month")
                 year = intent.parameters.get("year")
                 if month and year:
-                    count = supabase_service.get_monthly_container_count(month=month, year=year)
-                    response_text = build_monthly_containers_response(month=month, year=year, count=count)
+                    try:
+                        count = supabase_service.get_monthly_container_count(month=month, year=year)
+                        response_text = build_monthly_containers_response(month=month, year=year, count=count)
+                    except Exception as e:
+                        logger.error("Error getting monthly container count: %s", e, exc_info=True)
+                        response_text = build_fallback_response()
                 else:
+                    logger.warning("Missing month or year parameters for containers_count_monthly")
                     response_text = build_fallback_response()
             
             elif intent.name == "containers_count_daily":
