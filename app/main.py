@@ -89,6 +89,19 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests for debugging."""
+    logger.info("Incoming request: %s %s from %s", request.method, request.url.path, request.client.host if request.client else "unknown")
+    try:
+        response = await call_next(request)
+        logger.info("Response status: %s for %s %s", response.status_code, request.method, request.url.path)
+        return response
+    except Exception as e:
+        logger.error("Error processing request %s %s: %s", request.method, request.url.path, e, exc_info=True)
+        raise
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Log validation errors for debugging."""
