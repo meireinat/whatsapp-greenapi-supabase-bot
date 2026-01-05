@@ -954,12 +954,30 @@ async def chat_page():
                         return;
                     }
                     
-                    // Open NotebookLM through a helper page that will inject the script
-                    const helperUrl = window.location.origin + '/api/chat/notebooklm-helper?url=' + 
-                        encodeURIComponent(data.auto_open_url) + '&question=' + 
-                        encodeURIComponent(question);
+                    // Open NotebookLM with question in URL hash
+                    // We'll use a bookmarklet approach: pass question via URL hash
+                    const notebooklmUrlWithHash = data.auto_open_url + '#question=' + encodeURIComponent(question);
                     
-                    window.open(helperUrl, '_blank', 'noopener,noreferrer');
+                    // Also copy to clipboard as backup
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(question).then(function() {
+                            console.log('Question copied to clipboard');
+                        }).catch(function(err) {
+                            console.error('Failed to copy to clipboard:', err);
+                        });
+                    }
+                    
+                    // Open NotebookLM
+                    const newWindow = window.open(notebooklmUrlWithHash, '_blank', 'noopener,noreferrer');
+                    
+                    if (newWindow) {
+                        // Show instructions to user
+                        setTimeout(function() {
+                            alert('השאלה הועתקה ל-clipboard. לחץ על Ctrl+V (או Cmd+V ב-Mac) ב-NotebookLM כדי להדביק את השאלה.\n\nאו הרץ את ה-bookmarklet הבא בדף NotebookLM:\njavascript:(function(){const q=location.hash.match(/question=([^&]+)/);if(q){const question=decodeURIComponent(q[1]);const inputs=document.querySelectorAll(\'textarea,div[contenteditable="true"]\');for(const inp of inputs){if(inp.offsetParent!==null){if(inp.tagName===\'TEXTAREA\'){inp.value=question;inp.dispatchEvent(new Event(\'input\',{bubbles:true}));}else if(inp.contentEditable===\'true\'){inp.textContent=question;inp.dispatchEvent(new Event(\'input\',{bubbles:true}));}break;}}setTimeout(()=>{const btn=document.querySelector(\'button[type="submit"],button[aria-label*="Send"],button[aria-label*="שלח"]\');if(btn)btn.click();},500);}}})();');
+                        }, 500);
+                    } else {
+                        alert('נא לאפשר פתיחת חלונות חדשים בדפדפן כדי לפתוח את NotebookLM');
+                    }
                 }
             } catch (error) {
                 removeLoading();
