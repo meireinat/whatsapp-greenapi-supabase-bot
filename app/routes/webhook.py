@@ -536,6 +536,63 @@ async def handle_webhook(
             except Exception as e:
                 logger.error("Error calling Manager GPT service: %s", e, exc_info=True)
                 response_text = build_fallback_response()
+    elif intent.name == "monthly_containers_graph":
+        # Graph of containers per month – last year, Ashdod port (by KMUT over time)
+        logger.info("Building monthly containers graph (last year, Ashdod, bar)")
+        series = supabase_service.get_monthly_containers_series_last_year()
+        if not series:
+            response_text = "לא הצלחתי לבנות גרף כרגע (אין נתונים חודשיים זמינים)."
+        else:
+            # Prepare labels and data for QuickChart
+            labels = [f"{item['year']}-{item['month']:02d}" for item in series]
+            data = [int(item["count"] or 0) for item in series]
+
+            chart_config = {
+                "type": "bar",
+                "data": {
+                    "labels": labels,
+                    "datasets": [
+                        {
+                            "label": "מכולות לחודש (נמל אשדוד)",
+                            "data": data,
+                            "backgroundColor": "rgba(52, 152, 219, 0.7)",
+                            "borderColor": "rgba(41, 128, 185, 1.0)",
+                            "borderWidth": 1,
+                        }
+                    ],
+                },
+                "options": {
+                    "plugins": {
+                        "title": {
+                            "display": True,
+                            "text": "כמות מכולות לפי חודש – שנה אחרונה (נמל אשדוד)",
+                        },
+                        "legend": {"display": False},
+                    },
+                    "scales": {
+                        "x": {
+                            "title": {"display": True, "text": "חודש"},
+                        },
+                        "y": {
+                            "title": {"display": True, "text": "מספר מכולות"},
+                            "beginAtZero": True,
+                        },
+                    },
+                },
+            }
+
+            import json, urllib.parse
+
+            chart_url = (
+                "https://quickchart.io/chart?c="
+                + urllib.parse.quote(json.dumps(chart_config), safe="")
+            )
+
+            response_text = (
+                "להלן גרף כמות המכולות לפי חודש בשנה האחרונה (נמל אשדוד):\n"
+                f"{chart_url}\n\n"
+                "אם הקישור לא נפתח, ניתן להעתיק אותו לדפדפן."
+            )
     elif intent.name == "procedure_question":
         # Questions about procedures / operational queue rules.
         # ב-WhatsApp אי אפשר לפתוח אוטומטית את NotebookLM, לכן שולחים למשתמש הנחיה ברורה יחד עם הקישור והטקסט המדויק של השאלה.

@@ -624,6 +624,46 @@ class SupabaseService:
             )
             return 0
 
+    def get_monthly_containers_series_last_year(self) -> list[dict[str, Any]]:
+        """
+        Return monthly containers count for the last 12 months.
+
+        Each item is: {"year": YYYY, "month": MM, "count": int}
+        """
+        logger.info("Fetching monthly containers series for last 12 months")
+        try:
+            today = dt.date.today()
+            # Last completed month (to avoid partial current month)
+            if today.month == 1:
+                end_year = today.year - 1
+                end_month = 12
+            else:
+                end_year = today.year
+                end_month = today.month - 1
+
+            series: list[dict[str, Any]] = []
+            year = end_year
+            month = end_month
+
+            for _ in range(12):
+                count = self.get_containers_count_monthly(month, year)
+                series.append({"year": year, "month": month, "count": count})
+
+                # Go one month back
+                if month == 1:
+                    month = 12
+                    year -= 1
+                else:
+                    month -= 1
+
+            # Reverse to chronological order
+            series.reverse()
+            logger.info("Monthly containers series (last 12 months): %s", series)
+            return series
+        except Exception as e:
+            logger.error("Error fetching monthly containers series for last year: %s", e)
+            return []
+
     def get_containers_count_comparison(
         self, month1: int, year1: int, month2: int, year2: int
     ) -> dict[str, int]:

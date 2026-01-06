@@ -111,6 +111,14 @@ class IntentEngine:
         ),
     )
 
+    # Graph requests – e.g. "תן לי גרף של כמות המכולות לפי חודש"
+    GRAPH_MONTHLY_CONTAINERS_PATTERNS = (
+        re.compile(
+            r"\b(?:גרף|תרשים|chart|graph)\b.*\bמכולות\b.*\b(?:חודש|חודשית|חודשים|חודשי)\b",
+            re.IGNORECASE,
+        ),
+    )
+
     LLM_ANALYSIS_PATTERNS = (
         re.compile(r"\b(?:ניתוח|נתח|גמיני|Gemini|AI)\b", re.IGNORECASE),
     )
@@ -234,6 +242,19 @@ class IntentEngine:
                     )
                 else:
                     logger.warning("Failed to parse month from: %s", match.groupdict())
+
+        # Graph: monthly containers (for now, default port = Ashdod, last 12 months)
+        for pattern in self.GRAPH_MONTHLY_CONTAINERS_PATTERNS:
+            if pattern.search(stripped):
+                logger.info("GRAPH_MONTHLY_CONTAINERS_PATTERNS matched for text: %s", stripped)
+                return IntentResult(
+                    name="monthly_containers_graph",
+                    parameters={
+                        "port": "אשדוד",
+                        "range": "last_year",
+                        "chart_type": "bar",
+                    },
+                )
 
         for pattern in self.LLM_ANALYSIS_PATTERNS:
             match = pattern.search(stripped)
