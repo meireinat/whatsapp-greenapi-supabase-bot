@@ -536,6 +536,25 @@ async def handle_webhook(
             except Exception as e:
                 logger.error("Error calling Manager GPT service: %s", e, exc_info=True)
                 response_text = build_fallback_response()
+    elif intent.name == "procedure_question":
+        # Questions about procedures / operational queue rules.
+        # ב-WhatsApp אי אפשר לפתוח אוטומטית את NotebookLM, לכן שולחים למשתמש הנחיה ברורה יחד עם הקישור והטקסט המדויק של השאלה.
+        question = str(intent.parameters.get("question") or incoming_text)
+        notebook_id = "66688b34-ca77-4097-8ac8-42ca8285681f"
+        notebook_url = f"https://notebooklm.google.com/notebook/{notebook_id}"
+
+        logger.info(
+            "Procedure question detected, directing user to NotebookLM. Question: %s",
+            question,
+        )
+
+        response_text = (
+            "זאת שאלה על נהלים / תור תפעולי ולכן מופנית ל‑NotebookLM, שבו נמצאים המסמכים המלאים.\n\n"
+            "כדי לקבל תשובה מדויקת:\n"
+            f"1. פתח את הקישור: {notebook_url}\n"
+            "2. הדבק שם את השאלה הבאה ושלח אותה:\n"
+            f"\"{question}\"\n"
+        )
     else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Intent not implemented"
