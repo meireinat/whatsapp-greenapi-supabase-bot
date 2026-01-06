@@ -111,10 +111,14 @@ class IntentEngine:
         ),
     )
 
-    # Graph requests – e.g. "תן לי גרף של כמות המכולות לפי חודש"
+    # Graph requests – e.g. "תן לי גרף של כמות המכולות לפי חודש / בשנה האחרונה"
     GRAPH_MONTHLY_CONTAINERS_PATTERNS = (
         re.compile(
             r"\b(?:גרף|תרשים|chart|graph)\b.*\bמכולות\b.*\b(?:חודש|חודשית|חודשים|חודשי)\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:גרף|תרשים|chart|graph)\b.*\bמכולות\b.*\b(?:שנה\s+האחרונה|12\s+החודשים\s+האחרונים)\b",
             re.IGNORECASE,
         ),
     )
